@@ -1,0 +1,13 @@
+# 1. 先排除所有檔案與資料夾
+*
+
+# 2. 把你想保留的檔案加回來 (前面加 !)
+!.gitignore
+!ChromeBook_HP_Stress_Toolkit v1.0.sh
+!SSD/**
+!說明.txt
+!OS.txt
+!README_zh.md
+!README.md
+!handsoff.md
+!ssd.sh

@@ -1,0 +1,20 @@
+1. Copy_To_DUT (工具本地化)
+   - 用途：將整個腳本包複製到 /usr/local/
+
+2. Check_GBB_Value (韌體標記變更)
+   - 用途：讀取與寫入 GBB flags。
+
+3. Get_Generate_Logs (系統日誌收集)
+   - 用途：背景get generate_logs。
+
+4. Multimedia Test 項目 (影音網頁調用)
+   - 用途：透過 dbus-send 自動開啟 Chrome 測試網頁 (FHD 影片、WebGL 3D、Webcam 測試、File Copy Test)。
+
+5. Run_LinuxPCT_Stress (自動化壓力測試)
+   - 用途：載入 s3.ini, restart.ini, s5_chrome.ini 或綜合測試，跑 1000 次循環硬體耐操測試。
+
+6. Capture_PCT_Logs (壓測數據匯出)
+   - 用途：動態抓取隨身碟名稱，將 PCT 壓測歷史紀錄匯出至外部儲存裝置。
+
+7. Clean_Logs_And_Reboot / Remove_Verification
+   - 用途：刪除 var/log/ 日誌、移除系統 rootfs 驗證並重啟機台。
