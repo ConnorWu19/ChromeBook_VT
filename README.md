@@ -8,7 +8,7 @@ The ChromeBook HP Stress Toolkit is an automated diagnostic utility for DQA engi
 
 ## Prerequisites
 
-This toolkit requires the official HP LinuxPCT tool to function. Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from this repository. Please reach out to HP TPM support or the original author to acquire the required files.
+This toolkit requires the official HP LinuxPCT tool for related functional tests. Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from this repository. Please reach out to HP TPM support or the original author to acquire the required files.
 
 License
 
@@ -24,7 +24,7 @@ This project is for internal validation and development purposes. Third-party to
 ## Getting Started
 
 1. Clone this repository to your local machine.
-2. Place the required HP LinuxPCT binaries into the designated directory (ensure it matches your `.gitignore` configuration).
+2. (Optional) Place the required HP LinuxPCT binaries into the same directory.
 3. Make the main script executable:
    ```bash
-   chmod +x ChromeBook_HP_Stress_Toolkit.sh
+   bash ./ChromeBook_HP_Stress_Toolkit.sh
