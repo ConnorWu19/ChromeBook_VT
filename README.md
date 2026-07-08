@@ -16,9 +16,9 @@ This project is for internal validation and development purposes. Third-party to
 
 ## Features
 
-* **LinuxPCT Stress Execution**: Integrated automated workflows for hardware stress testing.
 * **System Telemetry Monitoring**: Real-time status tracking during validation cycles.
 * **Automated Environment Setup**: Simplifies rootfs verification removal and network configuration.
+* **LinuxPCT Stress Execution**: Integrated automated workflows for hardware stress testing.
 * **Log Management**: Automated log extraction and diagnostics.
 
 ## Getting Started
