@@ -1,10 +1,10 @@
-# ChromeBook HP Stress Toolkit
+# ChromeBook Validation Toolkit
 
 [繁體中文](README_zh.md)
 
 # About
 
-The ChromeBook HP Stress Toolkit is an automated diagnostic utility for DQA engineering. It streamlines validation with integrated menus for LinuxPCT stress execution, multimedia testing, and system telemetry monitoring.
+The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA engineering. It streamlines validation with integrated menus for LinuxPCT stress execution, multimedia testing, and system telemetry monitoring.
 
 ## Prerequisites
 
@@ -27,4 +27,4 @@ This project is for internal validation and development purposes. Third-party to
 2. (Optional) Place the required HP LinuxPCT binaries into the same directory.
 3. Make the main script executable:
    ```bash
-   bash ./ChromeBook_HP_Stress_Toolkit.sh
+   bash ./ChromeBook_Validation_Toolkit.sh
