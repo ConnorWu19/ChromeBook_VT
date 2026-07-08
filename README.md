@@ -1,4 +1,4 @@
-# ChromeBook_HP_Stress_Toolkit
+# ChromeBook HP Stress Toolkit
 
 [繁體中文](README_zh.md)
 
