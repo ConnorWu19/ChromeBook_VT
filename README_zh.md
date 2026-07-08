@@ -1,10 +1,10 @@
-ChromeBook\_HP\_Stress\_Toolkit
+ChromeBook\_Validation\_Toolkit
 
 
 
 \# 關於
 
-ChromeBook HP Stress Toolkit 是專為 DQA 工程設計的自動化診斷工具。它整合了 LinuxPCT stress測試、多媒體測試與系統狀態監控選單，藉此簡化驗證流程。
+ChromeBook Validation Toolkit 是專為 DQA 工程設計的自動化診斷工具。它整合了 LinuxPCT stress測試、多媒體測試與系統狀態監控選單，藉此簡化驗證流程。
 
 
 
@@ -39,5 +39,5 @@ LinuxPCT 壓力測試： 整合硬體壓力測試的自動化工作流程。
 2\. (選用) 將所需的 HP LinuxPCT 執行檔放入同一目錄。
 
 3\. 執行主腳本：
-bash ./ChromeBook\_HP\_Stress\_Toolkit.sh
+bash ./ChromeBook\_Validation\_Toolkit.sh
 
