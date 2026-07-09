@@ -28,3 +28,5 @@ This project is for internal validation and development purposes. Third-party to
 3. Make the main script executable:
    ```bash
    bash ./ChromeBook_Validation_Toolkit.sh
+
+<img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/099f2109-e1fe-4524-801d-57aabb1b8255" />
