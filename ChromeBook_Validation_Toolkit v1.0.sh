@@ -365,9 +365,9 @@ function Run_Internal_SSD_Stress() {
     print_executing "Initializing File Copy Test" 0.5
     
     # 確認這裡的路徑有同步更新
-    if [[ -f /usr/local/ChromeBook_VT/SSD/ssd.sh ]]; then
-        sudo chmod +x /usr/local/ChromeBook_VT/SSD/ssd.sh
-        sudo /usr/local/ChromeBook_VT/SSD/ssd.sh
+    if [[ -f /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh ]]; then
+        sudo chmod +x /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh
+        sudo /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh
     else
         log_error "找不到腳本，請確認已執行 Copy Script To DUT"
     fi
@@ -378,7 +378,7 @@ function Run_LinuxPCT_Stress() {
     local task_name=$2
     print_executing "$task_name" 1.0
     log_info "Starting $task_name..."
-    local target_dir="/usr/local/ChromeBook_VT"
+    local target_dir="/usr/local/ChromeBook_VT_v1.0"
     
     if [[ -d "$target_dir" ]]; then
         cd "$target_dir" || return
@@ -394,7 +394,7 @@ function Capture_PCT_Logs() {
     print_executing "Capture PCT Logs" 1.0
     log_info "Copying logs to USB disk..."
     
-    local log_dir="/usr/local/ChromeBook_VT/Log"
+    local log_dir="/usr/local/ChromeBook_VT_v1.0/Log"
     if [[ -d "$log_dir" ]]; then
         local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
