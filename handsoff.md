@@ -1,8 +1,6 @@
 \# 專案執行狀態
 
-\* 目前進度：update readme.md, 新增簡介以及LinuxPCT license require
+\* 目前進度：update version to v.1.01 , 新增releasre note file
 
-\* 待辦事項：繼續增加英文以及繁中簡介內容
-
-\* 關鍵決策：None
+\* 待辦事項：update program and release note v1.01 to github
 
