@@ -58,7 +58,7 @@ function startup_fade_in() {
     for c in "${fade_colors[@]}"; do
         echo -ne "\033[H\033[38;5;${c}m${BOLD}"
         echo "╔══════════════════════════════════════════════════════╗"
-        echo "║          ChromeBook Validation Toolkit v1.0          ║"
+        echo "║          ChromeBook Validation Toolkit v1.01         ║"
         echo "║               Created by DQA Connor_Wu               ║"
         echo "╚══════════════════════════════════════════════════════╝"
         echo -ne "${NC}"
@@ -172,11 +172,42 @@ function update_sysinfo() {
         if [[ $ac_mode -eq 1 ]]; then pwr_info="${GREEN}AC mode${NC}"; else pwr_info="${GREEN}DC mode (${bat_pct}%)${NC}"; fi
         
         local os_info="Unknown"
+        local os_txt_path="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/OS.txt"
+
         if [[ -f /etc/lsb-release ]]; then
-            os_info=$(grep "CHROMEOS_RELEASE_VERSION" /etc/lsb-release | cut -d'=' -f2 | xargs)
+            local full_ver=$(grep "CHROMEOS_RELEASE_VERSION" /etc/lsb-release | cut -d'=' -f2 | xargs)
+            
+            if [[ -f "$os_txt_path" ]] && grep -q "${full_ver}" "$os_txt_path"; then
+                local mapped_rev=$(grep "${full_ver}" "$os_txt_path" | awk -F'=' '{print $2}' | xargs)
+                os_info="${full_ver} (${mapped_rev})"
+            else
+                os_info="${full_ver}"
+            fi
+        fi
+
+        local gbb_val="Unknown"
+        if command -v futility &> /dev/null; then
+            local raw_gbb=$(sudo futility gbb -g --flash --flags 2>/dev/null | grep "flags:" | awk '{print $2}')
+            if [[ -n "$raw_gbb" ]]; then
+                gbb_val=$(echo "$raw_gbb" | sed 's/0x0*/0x/')
+                [[ "$gbb_val" == "0x" ]] && gbb_val="0x00"
+            fi
+        fi
+
+        local usb_brand="None"
+        local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
+        if [[ -n "$usb_name" ]]; then
+            local dev_node=$(df /media/removable/"$usb_name" 2>/dev/null | awk 'NR==2 {print $1}')
+            if [[ "$dev_node" == /dev/sd* ]]; then
+                local base_dev=$(basename "$dev_node" | sed 's/[0-9]*//g')
+                usb_brand=$(cat "/sys/block/$base_dev/device/vendor" 2>/dev/null | xargs)
+            fi
+            [[ -z "$usb_brand" ]] && usb_brand="$usb_name"
         fi
         
-        local new_sysinfo="\033[K${UI_LEFT_PAD}${CYAN}  [Net] ${net_color}${net_type}${NC}  ${CYAN}[Power] ${NC}${pwr_info}  ${CYAN}[OS] ${GREEN}${os_info}${NC}"
+        local line1="\033[K${UI_LEFT_PAD}${CYAN}  [Net] ${net_color}${net_type}${NC}  ${CYAN}[Power] ${NC}${pwr_info}  ${CYAN}[OS] ${GREEN}${os_info}${NC}"
+        local line2="\033[K${UI_LEFT_PAD}${CYAN}  [GBB] ${GREEN}${gbb_val}${NC}  ${CYAN} [USB] ${GREEN}${usb_brand}${NC}"
+        local new_sysinfo="${line1}\n${line2}"
         
         if [[ "$new_sysinfo" != "$CACHED_SYSINFO" ]]; then
             CACHED_SYSINFO="$new_sysinfo"
@@ -210,25 +241,31 @@ function countdown_poweroff() {
 
 function Copy_To_DUT() {
     print_executing "Copy Tool to DUT" 1.0
-    log_info "Copying folder to /usr/local..."
     
-    local source_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-    local folder_name="$(basename "$source_dir")"
-    local target_dir="/usr/local/$folder_name"
-
-    if [[ "$source_dir" == "$target_dir" ]]; then
-        log_success "Already running from /usr/local. Skip copy."
-        return
+    local USB_NAME=$(ls /media/removable/ 2>/dev/null | head -n 1)
+    if [[ -z "$USB_NAME" ]]; then
+        log_error "No flash drive detected. Please confirm that the device is mounted."
+        return 1
     fi
-
-    sudo rm -rf "$target_dir" 2>/dev/null
-    sudo cp -r "$source_dir" /usr/local/ 2>/dev/null
     
-    if [[ $? -eq 0 ]]; then
-        sudo chmod -R 777 "$target_dir" 2>/dev/null
-        log_success "Successfully copied to $target_dir."
+    log_info "USB flash drive detected: ${USB_NAME}"
+    local USB_TOOL_DIR="/media/removable/${USB_NAME}/ChromeBook_VT_v1.01"
+    local TARGET_DIR="/usr/local/ChromeBook_VT_v1.01"
+    
+    if [[ -d "$USB_TOOL_DIR" ]]; then
+        log_info "Copying files to /usr/local/ (This may take a while...)"
+        
+        sudo rm -rf "$TARGET_DIR" 2>/dev/null
+        sudo cp -r "$USB_TOOL_DIR" /usr/local/
+        
+        if [[ $? -eq 0 ]]; then
+            sudo chmod -R 777 "$TARGET_DIR" 2>/dev/null
+            log_success "The Toolkit has been successfully copied to /usr/local/"
+        else
+            log_error "Copy failed. Please check /usr/local storage space or permissions."
+        fi
     else
-        log_error "Copy failed. Please check permissions."
+        log_error "The Toolkit folder cannot be found on the USB drive. Please check the path."
     fi
 }
 
@@ -270,9 +307,9 @@ function Online_FHD_Video_Test() {
     echo "[$(date +'%H:%M:%S')] [EXEC] Online FHD Video" >> "$LOG_FILE"
     
     echo -e "\n${YELLOW}Select an Online Video Test Sample:${NC}"
-    echo "  1) Online video test sample - [1]"
-    echo "  2) Online video test sample - [2]"
-    echo "  3) Online video test sample - [3]"
+    echo "  1) Online video test sample [1]"
+    echo "  2) Online video test sample [2]"
+    echo "  3) Online video test sample [3]"
     echo "  4) Cancel"
     
     while true; do
@@ -280,15 +317,15 @@ function Online_FHD_Video_Test() {
         read -r vid_opt
         case "$vid_opt" in
             1)
-                print_executing "Online FHD Video - Sample 1" 0.4
+                print_executing "Online FHD Video Sample 1" 0.4
                 open_url "https://www.youtube.com/watch?v=RHUauMcYlX0"
                 break ;;
             2)
-                print_executing "Online FHD Video - Sample 2" 0.4
+                print_executing "Online FHD Video Sample 2" 0.4
                 open_url "https://www.youtube.com/watch?v=rEKifG2XUZg"
                 break ;;
             3)
-                print_executing "Online FHD Video - Sample 3" 0.4
+                print_executing "Online FHD Video Sample 3" 0.4
                 open_url "https://www.youtube.com/watch?v=uZkaJ3e9nfY"
                 break ;;
             4|q|Q)
@@ -305,7 +342,6 @@ function HTML5_Video_Test() { print_executing "HTML5 Video Test" 0.4; open_url "
 function WebGL_Test() { print_executing "WebGL Test" 0.4; open_url "https://webglsamples.org/aquarium/aquarium.html"; }
 function Webcam_Nic_Wlan_Test() { print_executing "Webcam_Nic_or_Wlan" 0.4; open_url "https://webcamtests.com/"; }
 
-# 核心整合：File Copy Test 互動選單機制
 function File_Copy_Test_Menu() {
     stty echo
     tput cnorm
@@ -336,10 +372,9 @@ function File_Copy_Test_Menu() {
                 break ;;
             2)
                 echo ""
-                # 直接呼叫已有的複製函式
                 Copy_To_DUT
                 echo -ne "\n${MAGENTA}Press [Enter] to return to menu...${NC}"
-                read -rsn1 wait_key; until [[ "$wait_key" == "" ]]; do read -rsn1 wait_key; done
+                read -r wait_key
                 ;;
             3)
                 echo ""
@@ -360,16 +395,14 @@ function File_Copy_Test_Menu() {
     stty -echo
 }
 
-# 內建整合的 ssd.sh 壓力測試引擎
 function Run_Internal_SSD_Stress() {
     print_executing "Initializing File Copy Test" 0.5
     
-    # 確認這裡的路徑有同步更新
-    if [[ -f /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh ]]; then
-        sudo chmod +x /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh
-        sudo /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh
+    if [[ -f /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh ]]; then
+        sudo chmod +x /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh
+        sudo /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh
     else
-        log_error "找不到腳本，請確認已執行 Copy Script To DUT"
+        log_error "Not found the /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh. Please execute the option2 first:[2. Copy Script to DUT]。"
     fi
 }
 
@@ -378,7 +411,7 @@ function Run_LinuxPCT_Stress() {
     local task_name=$2
     print_executing "$task_name" 1.0
     log_info "Starting $task_name..."
-    local target_dir="/usr/local/ChromeBook_VT_v1.0"
+    local target_dir="/usr/local/ChromeBook_VT_v1.01"
     
     if [[ -d "$target_dir" ]]; then
         cd "$target_dir" || return
@@ -394,7 +427,7 @@ function Capture_PCT_Logs() {
     print_executing "Capture PCT Logs" 1.0
     log_info "Copying logs to USB disk..."
     
-    local log_dir="/usr/local/ChromeBook_VT_v1.0/Log"
+    local log_dir="/usr/local/ChromeBook_VT_v1.01/Log"
     if [[ -d "$log_dir" ]]; then
         local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
@@ -504,7 +537,7 @@ function build_menu() {
             MENU_TEXT+=("    2) HTML5 Video Test"); MENU_CMD+=("CMD_HTML5")
             MENU_TEXT+=("    3) WebGL Test"); MENU_CMD+=("CMD_WEBGL")
             MENU_TEXT+=("    4) Webcam w/ NIC or WLAN Test (Cover AC/DC Mode)"); MENU_CMD+=("CMD_WEBCAM")
-            MENU_TEXT+=("    5) File Copy Test"); MENU_CMD+=("CMD_FILE_COPY_TEST")
+            MENU_TEXT+=("    5) File Copy Test [HWQA]"); MENU_CMD+=("CMD_FILE_COPY_TEST")
             MENU_TEXT+=("    6) Exit"); MENU_CMD+=("CMD_EXIT")
             ;;
         2)
@@ -524,7 +557,7 @@ function build_menu() {
 
 function get_opt_color() {
     if [[ "$1" == *"Exit"* ]]; then echo -n "${RED}"
-    elif [[ "$1" == *"Copy Tool to DUT"* || "$1" == *"Get Generate Logs"* || "$1" == *"Reboot System"* || "$1" == *"Power Off System"* || "$1" == *"Clean Logs"* || "$1" == *"Check GBB Value"* ]]; then echo -n "${YELLOW}"
+    elif [[ "$1" == *"Copy Tool to DUT"* || "$1" == *"Copy Tool To DUT"* || "$1" == *"Get Generate Logs"* || "$1" == *"Reboot System"* || "$1" == *"Power Off System"* || "$1" == *"Clean Logs"* || "$1" == *"Check GBB Value"* ]]; then echo -n "${YELLOW}"
     elif [[ "$1" == *"Stress"* || "$1" == *"Remove Verification"* || "$1" == *"Capture Logs"* ]]; then echo -n "${MAGENTA}"
     else echo -n "${GREEN}"; fi
 }
@@ -535,29 +568,30 @@ function draw_full_menu() {
     
     local top_border bot_border divider title1 title2 tab_str footer
     
-    local t0="[General]"
-    local t1="[Multimedia Test]"
-    local t2="[LinuxPCT]"
-    [[ $CURRENT_TAB -eq 0 ]] && t0="${UI_SEL}${t0}${NC}" || t0="${UI_PRIMARY}${t0}${NC}"
-    [[ $CURRENT_TAB -eq 1 ]] && t1="${UI_SEL}${t1}${NC}" || t1="${UI_PRIMARY}${t1}${NC}"
-    [[ $CURRENT_TAB -eq 2 ]] && t2="${UI_SEL}${t2}${NC}" || t2="${UI_PRIMARY}${t2}${NC}"
+    local t0="General"
+    local t1="Multimedia Test"
+    local t2="LinuxPCT"
+
+    [[ $CURRENT_TAB -eq 0 ]] && t0="${UI_SEL}▶ General${NC}" || t0="${UI_PRIMARY}General${NC}"
+    [[ $CURRENT_TAB -eq 1 ]] && t1="${UI_SEL}▶ Multimedia Test${NC}" || t1="${UI_PRIMARY}Multimedia Test${NC}"
+    [[ $CURRENT_TAB -eq 2 ]] && t2="${UI_SEL}▶ LinuxPCT${NC}" || t2="${UI_PRIMARY}LinuxPCT${NC}"
 
     if [[ $SCALE_MODE -eq 0 ]]; then
         top_border="╔══════════════════════════════════════════════════════╗"
         bot_border="╚══════════════════════════════════════════════════════╝"
         divider="────────────────────────────────────────────────────────"
-        title1="║          ChromeBook Validation Toolkit v1.0          ║"
+        title1="║          ChromeBook Validation Toolkit v1.01         ║"
         title2="║               Created by DQA Connor_Wu               ║"
         tab_str="   ${t0}      ${t1}      ${t2}"
-        footer="  ↑/↓,←/→:Navigate │ Enter:Select │ T:Theme │ D:Size"
+        footer="  ↑/↓,←/→:Navigate │ Enter:Select │ T:Theme │ D:Scale"
     elif [[ $SCALE_MODE -eq 1 ]]; then
         top_border="     ╔════════════════════════════════════════════════════════════════╗"
         bot_border="     ╚════════════════════════════════════════════════════════════════╝"
         divider="     ──────────────────────────────────────────────────────────────────"
-        title1="     ║               ChromeBook Validation Toolkit v1.0               ║"
+        title1="     ║               ChromeBook Validation Toolkit v1.01              ║"
         title2="     ║                    Created by DQA Connor_Wu                    ║"
         tab_str="        ${t0}          ${t1}          ${t2}"
-        footer="       ↑/↓,←/→:Navigate  │  Enter:Select  │  T:Theme  │  D:Size       "
+        footer="       ↑/↓,←/→:Navigate  │  Enter:Select  │  T:Theme  │  D:Scale       "
     fi
 
     out+="\033[K${UI_PRIMARY}${BOLD}${top_border}${NC}\n"
@@ -588,7 +622,7 @@ function draw_full_menu() {
 
 function draw_selection_only() {
     local old_idx=$1; local new_idx=$2
-    local start_line=9
+    local start_line=10
     local old_line=$(( start_line + old_idx * (UI_V_PAD + 1) ))
     local new_line=$(( start_line + new_idx * (UI_V_PAD + 1) ))
     
@@ -646,7 +680,7 @@ while true; do
                     CMD_POWEROFF) countdown_poweroff ;;
                     CMD_EXIT) log_info "Exiting ChromeBook Validation Toolkit~Goodbye!"; exit 0 ;;
                 esac
-                if [[ $PAUSE -eq 1 ]]; then echo -ne "${MAGENTA}Press [Enter] to return to main menu...${NC}"; read -rsn1 wait_key; until [[ "$wait_key" == "" ]]; do read -rsn1 wait_key; done; fi
+                if [[ $PAUSE -eq 1 ]]; then echo -ne "${MAGENTA}Press [Enter] to return to main menu...${NC}"; read -r wait_key; fi
                 tput civis; stty -echo; FORCE_REDRAW=1 ;;
         esac
     fi
