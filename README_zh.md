@@ -41,3 +41,5 @@ LinuxPCT 壓力測試： 整合硬體壓力測試的自動化工作流程。
 3\. 執行主腳本：
 bash ./ChromeBook\_Validation\_Toolkit.sh
 
+<img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/4954e687-3f10-44b7-986b-86f9e56d618d" />
+
