@@ -2,13 +2,10 @@
 *
 
 # 2. 把你想保留的檔案加回來 (前面加 !)
-!.gitignore
 !ChromeBook_Validation_Toolkit v1.01.sh
 !SSD/**
 !說明.txt
-!OS.txt
 !README_zh.md
 !README.md
-!handsoff.md
 !ssd.sh
 !Release note.md
