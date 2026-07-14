@@ -3,7 +3,7 @@
 
 # 2. 把你想保留的檔案加回來 (前面加 !)
 !.gitignore
-!ChromeBook_Validation_Toolkit v1.01.sh
+!ChromeBook_Validation_Toolkit v1.0.sh
 !SSD/**
 !說明.txt
 !OS.txt
