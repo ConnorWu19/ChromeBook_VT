@@ -317,15 +317,15 @@ function Online_FHD_Video_Test() {
         read -r vid_opt
         case "$vid_opt" in
             1)
-                print_executing "Online FHD Video Sample 1" 0.4
+                print_executing "Online FHD Video Sample 1" 0.5
                 open_url "https://www.youtube.com/watch?v=RHUauMcYlX0"
                 break ;;
             2)
-                print_executing "Online FHD Video Sample 2" 0.4
+                print_executing "Online FHD Video Sample 2" 0.5
                 open_url "https://www.youtube.com/watch?v=rEKifG2XUZg"
                 break ;;
             3)
-                print_executing "Online FHD Video Sample 3" 0.4
+                print_executing "Online FHD Video Sample 3" 0.5
                 open_url "https://www.youtube.com/watch?v=uZkaJ3e9nfY"
                 break ;;
             4|q|Q)
