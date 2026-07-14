@@ -240,32 +240,32 @@ function countdown_poweroff() {
 }
 
 function Copy_To_DUT() {
-    print_executing "Copy Tool & SSD to DUT" 1.0
+    print_executing "Copy Tool to DUT" 1.0
     
     local USB_NAME=$(ls /media/removable/ 2>/dev/null | head -n 1)
     if [[ -z "$USB_NAME" ]]; then
-        log_error "未偵測到隨身碟，請確認裝置已掛載。"
+        log_error "No flash drive detected. Please confirm that the device is mounted."
         return 1
     fi
     
-    log_info "偵測到隨身碟：${USB_NAME}"
-    local USB_TOOL_DIR="/media/removable/${USB_NAME}/ChromeBook_VT_v1.0"
-    local USB_SSD_DIR="/media/removable/${USB_NAME}/ChromeBook_VT_v1.0/SSD"
+    log_info "USB flash drive detected: ${USB_NAME}"
+    local USB_TOOL_DIR="/media/removable/${USB_NAME}/ChromeBook_VT_v1.01"
+    local TARGET_DIR="/usr/local/ChromeBook_VT_v1.01"
     
     if [[ -d "$USB_TOOL_DIR" ]]; then
-        sudo cp -a "$USB_TOOL_DIR" /usr/local/ 2>/dev/null
-        sudo chmod -R 777 /usr/local/ChromeBook_VT_v1.0 2>/dev/null
-        log_success "Toolkit tool already copy to /usr/local/"
-    fi
-
-    if [[ -d "$USB_SSD_DIR" ]]; then
-        sudo rm -rf /usr/local/ChromeBook_VT_v1.0/SSD 2>/dev/null
-        sudo mkdir -p /usr/local/ChromeBook_VT_v1.0/SSD 2>/dev/null
-        sudo cp -a "$USB_SSD_DIR/." /usr/local/ChromeBook_VT_v1.0/SSD/ 2>/dev/null
-        sudo chmod -R 777 /usr/local/ChromeBook_VT_v1.0/SSD 2>/dev/null
-        log_success "SSD script already copy to /usr/local/ChromeBook_VT_v1.0/SSD/"
+        log_info "Copying files to /usr/local/ (This may take a while...)"
+        
+        sudo rm -rf "$TARGET_DIR" 2>/dev/null
+        sudo cp -r "$USB_TOOL_DIR" /usr/local/
+        
+        if [[ $? -eq 0 ]]; then
+            sudo chmod -R 777 "$TARGET_DIR" 2>/dev/null
+            log_success "The Toolkit has been successfully copied to /usr/local/"
+        else
+            log_error "Copy failed. Please check /usr/local storage space or permissions."
+        fi
     else
-        log_error "隨身碟內找不到 SSD 資料夾，請確認路徑正確。"
+        log_error "The Toolkit folder cannot be found on the USB drive. Please check the path."
     fi
 }
 
@@ -317,15 +317,15 @@ function Online_FHD_Video_Test() {
         read -r vid_opt
         case "$vid_opt" in
             1)
-                print_executing "Online FHD Video Sample 1" 0.4
+                print_executing "Online FHD Video Sample 1" 0.5
                 open_url "https://www.youtube.com/watch?v=RHUauMcYlX0"
                 break ;;
             2)
-                print_executing "Online FHD Video Sample 2" 0.4
+                print_executing "Online FHD Video Sample 2" 0.5
                 open_url "https://www.youtube.com/watch?v=rEKifG2XUZg"
                 break ;;
             3)
-                print_executing "Online FHD Video Sample 3" 0.4
+                print_executing "Online FHD Video Sample 3" 0.5
                 open_url "https://www.youtube.com/watch?v=uZkaJ3e9nfY"
                 break ;;
             4|q|Q)
@@ -398,11 +398,11 @@ function File_Copy_Test_Menu() {
 function Run_Internal_SSD_Stress() {
     print_executing "Initializing File Copy Test" 0.5
     
-    if [[ -f /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh ]]; then
-        sudo chmod +x /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh
-        sudo /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh
+    if [[ -f /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh ]]; then
+        sudo chmod +x /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh
+        sudo /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh
     else
-        log_error "找不到 /usr/local/ChromeBook_VT_v1.0/SSD/ssd.sh。請先執行選項 [2. Copy Script to DUT]。"
+        log_error "Not found the /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh. Please execute the option2 first:[2. Copy Script to DUT]。"
     fi
 }
 
@@ -411,7 +411,7 @@ function Run_LinuxPCT_Stress() {
     local task_name=$2
     print_executing "$task_name" 1.0
     log_info "Starting $task_name..."
-    local target_dir="/usr/local/ChromeBook_VT_v1.0"
+    local target_dir="/usr/local/ChromeBook_VT_v1.01"
     
     if [[ -d "$target_dir" ]]; then
         cd "$target_dir" || return
@@ -427,7 +427,7 @@ function Capture_PCT_Logs() {
     print_executing "Capture PCT Logs" 1.0
     log_info "Copying logs to USB disk..."
     
-    local log_dir="/usr/local/ChromeBook_VT_v1.0/Log"
+    local log_dir="/usr/local/ChromeBook_VT_v1.01/Log"
     if [[ -d "$log_dir" ]]; then
         local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
