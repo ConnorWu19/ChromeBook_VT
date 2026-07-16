@@ -1,6 +1,5 @@
 
 
-
 a=0
 b=1
 #mount -o remount,rw /
