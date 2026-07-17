@@ -10,8 +10,19 @@ BOLD='\033[1m'
 INVERSE='\033[7m'
 NC='\033[0m'
 
-LOG_FILE="/tmp/CBVT_stress.log"
-echo "=== ChromeBook Validation Toolkit Session: $(date) ===" > "$LOG_FILE"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+
+if [[ ! -r "$CONFIG_FILE" ]]; then
+    echo "Configuration file not found: $CONFIG_FILE" >&2
+    exit 1
+fi
+
+# shellcheck source=config.sh
+source "$CONFIG_FILE"
+
+LOG_FILE="$SESSION_LOG"
+echo "=== ${TOOL_DISPLAY_NAME} Session: $(date) ===" > "$LOG_FILE"
 
 declare -g UI_PRIMARY
 declare -g UI_SEL
@@ -58,8 +69,8 @@ function startup_fade_in() {
     for c in "${fade_colors[@]}"; do
         echo -ne "\033[H\033[38;5;${c}m${BOLD}"
         echo "╔══════════════════════════════════════════════════════╗"
-        echo "║          ChromeBook Validation Toolkit v1.01         ║"
-        echo "║               Created by DQA Connor_Wu               ║"
+        echo "║          ${TOOL_DISPLAY_NAME} ${TOOL_VERSION}         ║"
+        echo "║                Created by Connor Wu                  ║"
         echo "╚══════════════════════════════════════════════════════╝"
         echo -ne "${NC}"
         sleep 0.06
@@ -95,6 +106,19 @@ log_success() { echo -e "${GREEN}[$(date +'%H:%M:%S')] [SUCCESS]${NC} $1" | tee 
 log_warn() { echo -e "${YELLOW}[$(date +'%H:%M:%S')] [WARN]${NC} $1" | tee -a "$LOG_FILE"; }
 log_error() { echo -e "${RED}[$(date +'%H:%M:%S')] [ERROR]${NC} $1" | tee -a "$LOG_FILE"; }
 
+function run_logged_command() {
+    local description=$1
+    shift
+
+    if "$@" >> "$LOG_FILE" 2>&1; then
+        return 0
+    else
+        local exit_code=$?
+        log_error "${description} failed (exit code: ${exit_code}). See ${LOG_FILE}."
+        return "$exit_code"
+    fi
+}
+
 function draw_progress_bar() {
     local duration=$1
     local prefix=$2
@@ -123,11 +147,14 @@ function print_executing() {
 }
 
 function open_url() {
-    sudo -u chronos dbus-send --system --type=method_call \
-      --dest=org.chromium.UrlHandlerService \
-      /org/chromium/UrlHandlerService \
-      org.chromium.UrlHandlerServiceInterface.OpenUrl \
-      string:"$1" > /dev/null 2>&1
+    if ! run_logged_command "Open URL" sudo -u chronos dbus-send --system --type=method_call \
+        --dest=org.chromium.UrlHandlerService \
+        /org/chromium/UrlHandlerService \
+        org.chromium.UrlHandlerServiceInterface.OpenUrl \
+        string:"$1"; then
+        log_error "Unable to open the test URL. Check the ChromeOS URL handler service."
+        return 1
+    fi
     
     log_success "URL Opened Successfully."
     log_warn "Please manually switch to VT1 by pressing CTRL+ALT+F1"
@@ -195,9 +222,9 @@ function update_sysinfo() {
         fi
 
         local usb_brand="None"
-        local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
+        local usb_name=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
-            local dev_node=$(df /media/removable/"$usb_name" 2>/dev/null | awk 'NR==2 {print $1}')
+            local dev_node=$(df "${USB_MOUNT_BASE_DIR}/${usb_name}" 2>/dev/null | awk 'NR==2 {print $1}')
             if [[ "$dev_node" == /dev/sd* ]]; then
                 local base_dev=$(basename "$dev_node" | sed 's/[0-9]*//g')
                 usb_brand=$(cat "/sys/block/$base_dev/device/vendor" 2>/dev/null | xargs)
@@ -225,7 +252,7 @@ function countdown_reboot() {
     done
     echo ""
     tput cnorm
-    sudo reboot
+    run_logged_command "System reboot request" sudo reboot
 }
 
 function countdown_poweroff() {
@@ -236,34 +263,39 @@ function countdown_poweroff() {
     done
     echo ""
     tput cnorm
-    sudo poweroff
+    run_logged_command "System power-off request" sudo poweroff
 }
 
 function Copy_To_DUT() {
     print_executing "Copy Tool to DUT" 1.0
     
-    local USB_NAME=$(ls /media/removable/ 2>/dev/null | head -n 1)
+    local USB_NAME=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
     if [[ -z "$USB_NAME" ]]; then
         log_error "No flash drive detected. Please confirm that the device is mounted."
         return 1
     fi
     
     log_info "USB flash drive detected: ${USB_NAME}"
-    local USB_TOOL_DIR="/media/removable/${USB_NAME}/ChromeBook_VT_v1.01"
-    local TARGET_DIR="/usr/local/ChromeBook_VT_v1.01"
+    local USB_TOOL_DIR="${USB_MOUNT_BASE_DIR}/${USB_NAME}/${USB_FOLDER_NAME}"
+    local TARGET_DIR="$INSTALL_DIR"
     
     if [[ -d "$USB_TOOL_DIR" ]]; then
         log_info "Copying files to /usr/local/ (This may take a while...)"
         
-        sudo rm -rf "$TARGET_DIR" 2>/dev/null
-        sudo cp -r "$USB_TOOL_DIR" /usr/local/
-        
-        if [[ $? -eq 0 ]]; then
-            sudo chmod -R 777 "$TARGET_DIR" 2>/dev/null
-            log_success "The Toolkit has been successfully copied to /usr/local/"
-        else
-            log_error "Copy failed. Please check /usr/local storage space or permissions."
+        if ! run_logged_command "Remove previous toolkit installation" sudo rm -rf "$TARGET_DIR"; then
+            return 1
         fi
+
+        if ! run_logged_command "Copy toolkit from USB" sudo cp -r "$USB_TOOL_DIR" "$INSTALL_BASE_DIR/"; then
+            log_error "Copy failed. Check USB access, storage space, and permissions."
+            return 1
+        fi
+
+        if ! run_logged_command "Set toolkit permissions" sudo chmod -R 777 "$TARGET_DIR"; then
+            return 1
+        fi
+
+        log_success "The Toolkit has been successfully copied to ${INSTALL_BASE_DIR}."
     else
         log_error "The Toolkit folder cannot be found on the USB drive. Please check the path."
     fi
@@ -274,7 +306,12 @@ function Check_GBB_Value() {
     draw_progress_bar 0.5 "Reading GBB Flags" 10
     echo ""
     log_info "Current GBB Flags:"
-    sudo futility gbb -g --flash --flags
+    sudo futility gbb -g --flash --flags 2>&1 | tee -a "$LOG_FILE"
+    local gbb_exit_code=${PIPESTATUS[0]}
+    if [[ $gbb_exit_code -ne 0 ]]; then
+        log_error "Unable to read GBB flags (exit code: ${gbb_exit_code}). See ${LOG_FILE}."
+        return "$gbb_exit_code"
+    fi
     
     echo -e "\n${YELLOW}Do you want to change the GBB value?${NC}"
     echo "  1) Change GBB value to 0x39 (For LinuxPCT use)"
@@ -286,11 +323,15 @@ function Check_GBB_Value() {
         read -r k
         case "$k" in
             1)
-                sudo futility gbb -s --flash --flags 0x39
+                if ! run_logged_command "Set GBB flags to 0x39" sudo futility gbb -s --flash --flags 0x39; then
+                    return 1
+                fi
                 log_success "GBB value updated to 0x39"
                 break ;;
             2)
-                sudo futility gbb -s --flash --flags 0x0
+                if ! run_logged_command "Set GBB flags to 0x0" sudo futility gbb -s --flash --flags 0x0; then
+                    return 1
+                fi
                 log_success "GBB value updated to 0x0"
                 break ;;
             3|q|Q)
@@ -366,7 +407,9 @@ function File_Copy_Test_Menu() {
             1)
                 echo ""
                 print_executing "Forced Remove Rootfs Verification" 1.0
-                sudo /usr/share/vboot/bin/make_dev_ssd.sh --force --remove_rootfs_verification
+                if ! run_logged_command "Force rootfs verification removal" sudo /usr/share/vboot/bin/make_dev_ssd.sh --force --remove_rootfs_verification; then
+                    return 1
+                fi
                 log_warn "Verification removed. System must reboot now."
                 countdown_reboot
                 break ;;
@@ -398,11 +441,23 @@ function File_Copy_Test_Menu() {
 function Run_Internal_SSD_Stress() {
     print_executing "Initializing File Copy Test" 0.5
     
-    if [[ -f /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh ]]; then
-        sudo chmod +x /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh
-        sudo /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh
+    local ssd_script="${SSD_DIR}/ssd.sh"
+
+    if [[ -f "$ssd_script" ]]; then
+        if ! run_logged_command "Set SSD test script permissions" sudo chmod +x "$ssd_script"; then
+            return 1
+        fi
+
+        sudo "$ssd_script"
+        local ssd_exit_code=$?
+        if [[ $ssd_exit_code -ne 0 ]]; then
+            log_error "SSD stress test stopped unexpectedly (exit code: ${ssd_exit_code}). See ${LOG_FILE}."
+            return "$ssd_exit_code"
+        fi
+
+        log_warn "SSD stress test stopped."
     else
-        log_error "Not found the /usr/local/ChromeBook_VT_v1.01/SSD/ssd.sh. Please execute the option2 first:[2. Copy Script to DUT]。"
+        log_error "SSD test script not found: $ssd_script. Please execute option 2 first: Copy Script to DUT."
     fi
 }
 
@@ -411,7 +466,7 @@ function Run_LinuxPCT_Stress() {
     local task_name=$2
     print_executing "$task_name" 1.0
     log_info "Starting $task_name..."
-    local target_dir="/usr/local/ChromeBook_VT_v1.01"
+    local target_dir="$INSTALL_DIR"
     
     if [[ -d "$target_dir" ]]; then
         cd "$target_dir" || return
@@ -427,14 +482,17 @@ function Capture_PCT_Logs() {
     print_executing "Capture PCT Logs" 1.0
     log_info "Copying logs to USB disk..."
     
-    local log_dir="/usr/local/ChromeBook_VT_v1.01/Log"
+    local log_dir="$PCT_LOG_DIR"
     if [[ -d "$log_dir" ]]; then
-        local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
+        local usb_name=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
-            sudo cp -a -p --no-preserve=ownership "$log_dir" /media/removable/"$usb_name"/ 2>/dev/null
+            if ! run_logged_command "Copy LinuxPCT logs to USB" sudo cp -a -p --no-preserve=ownership "$log_dir" "${USB_MOUNT_BASE_DIR}/${usb_name}/"; then
+                return 1
+            fi
+
             log_success "Logs successfully copied to USB disk (${usb_name})."
         else
-            log_warn "USB disk not found in /media/removable/, logs only copied to Downloads."
+            log_warn "USB disk not found in ${USB_MOUNT_BASE_DIR}, logs only copied to Downloads."
         fi
     else
         log_error "Log directory not found: $log_dir"
@@ -446,7 +504,7 @@ function Get_Generate_Logs() {
     log_info "Generating system logs (this may take a while)..."
     
     local start_time=$(date +%s)
-    sudo generate_logs > /dev/null 2>&1 &
+    sudo generate_logs >> "$LOG_FILE" 2>&1 &
     local pid=$!
     
     local prefix="Get Generate Logs"
@@ -461,39 +519,69 @@ function Get_Generate_Logs() {
         ((i++))
         sleep 0.5
     done
+
+    wait "$pid"
+    local generate_logs_exit_code=$?
+    if [[ $generate_logs_exit_code -ne 0 ]]; then
+        log_error "System log generation failed (exit code: ${generate_logs_exit_code}). See ${LOG_FILE}."
+        return "$generate_logs_exit_code"
+    fi
     
     printf "\r\033[K[*] %-20s [${GREEN}OK${NC}] 100%%\n" "$prefix"
     sleep 2
     
-    local latest_log=$(sudo find /var/log /tmp /home/chronos/user/Downloads -name "debug-logs_2026*.tgz" -type f -newermt "@$start_time" 2>/dev/null | head -n 1)
+    local find_output
+    if find_output=$(sudo find "${DEBUG_LOG_SEARCH_DIRS[@]}" -name "$DEBUG_LOG_FILE_PATTERN" -type f -newermt "@$start_time" 2>> "$LOG_FILE"); then
+        :
+    else
+        local find_exit_code=$?
+        log_error "Unable to search for the generated debug log (exit code: ${find_exit_code}). See ${LOG_FILE}."
+        return "$find_exit_code"
+    fi
+    local latest_log=$(printf '%s\n' "$find_output" | head -n 1)
     
     if [[ -n "$latest_log" ]]; then
-        sudo cp "$latest_log" /usr/local/ 2>/dev/null
+        if ! run_logged_command "Copy generated log to ${INSTALL_BASE_DIR}" sudo cp "$latest_log" "$INSTALL_BASE_DIR/"; then
+            log_warn "Unable to copy the generated log to ${INSTALL_BASE_DIR}; continuing with log export."
+        fi
         
         echo ""
         echo -ne "${YELLOW}Enter custom folder name to save log file: ${NC}"
-        read -r custom_folder
+        # Use Bash readline so Backspace edits the input instead of being stored as a control character.
+        read -e -r custom_folder
         
         if [[ -z "$custom_folder" ]]; then
             custom_folder="Debug_Log_$(date +%Y%m%d_%H%M%S)"
             log_warn "No name entered. Using default folder name: $custom_folder"
         fi
         
-        local dl_target_dir="/home/chronos/user/Downloads/$custom_folder"
-        sudo mkdir -p "$dl_target_dir" 2>/dev/null
-        sudo cp -a -p --no-preserve=ownership "$latest_log" "$dl_target_dir/" 2>/dev/null
-        sudo chmod -R 777 "$dl_target_dir" 2>/dev/null
+        local dl_target_dir="${DOWNLOAD_DIR}/${custom_folder}"
+        if ! run_logged_command "Create Downloads log directory" sudo mkdir -p "$dl_target_dir"; then
+            return 1
+        fi
+        if ! run_logged_command "Copy generated log to Downloads" sudo cp -a -p --no-preserve=ownership "$latest_log" "$dl_target_dir/"; then
+            return 1
+        fi
+        if ! run_logged_command "Set Downloads log permissions" sudo chmod -R 777 "$dl_target_dir"; then
+            return 1
+        fi
         log_success "Logs saved to Downloads: $custom_folder/$(basename "$latest_log")"
         
-        local usb_name=$(ls /media/removable/ 2>/dev/null | head -n 1)
+        local usb_name=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
-            local usb_target_dir="/media/removable/$usb_name/$custom_folder"
-            sudo mkdir -p "$usb_target_dir" 2>/dev/null
-            sudo cp -a -p --no-preserve=ownership "$latest_log" "$usb_target_dir/" 2>/dev/null
-            sudo chmod -R 777 "$usb_target_dir" 2>/dev/null
+            local usb_target_dir="${USB_MOUNT_BASE_DIR}/${usb_name}/${custom_folder}"
+            if ! run_logged_command "Create USB log directory" sudo mkdir -p "$usb_target_dir"; then
+                return 1
+            fi
+            if ! run_logged_command "Copy generated log to USB" sudo cp -a -p --no-preserve=ownership "$latest_log" "$usb_target_dir/"; then
+                return 1
+            fi
+            if ! run_logged_command "Set USB log permissions" sudo chmod -R 777 "$usb_target_dir"; then
+                return 1
+            fi
             log_success "Logs successfully copied to USB disk [${usb_name}]: $custom_folder/"
         else
-            log_warn "USB disk not found in /media/removable/. Skipped USB backup."
+            log_warn "USB disk not found in ${USB_MOUNT_BASE_DIR}. Skipped USB backup."
         fi
     else
         log_error "Newly generated log file not found."
@@ -504,17 +592,50 @@ function Get_Generate_Logs() {
 function Clean_Logs_And_Reboot() {
     print_executing "Clean Logs" 1.0
     log_warn "Cleaning system logs..."
-    sudo rm -rf /var/log/ /var/log/spool/
-    sudo chromeos-cleanup-logs > /dev/null 2>&1
+    if ! run_logged_command "Remove system log directories" sudo rm -rf /var/log/ /var/log/spool/; then
+        return 1
+    fi
+    if ! run_logged_command "Run ChromeOS log cleanup" sudo chromeos-cleanup-logs; then
+        return 1
+    fi
     log_success "Logs cleaned successfully."
     countdown_reboot
 }
 
 function Remove_Verification_Unit_will_reboot() {
     print_executing "Remove Verification" 1.0
-    sudo /usr/share/vboot/bin/make_dev_ssd.sh --remove_rootfs_verification --partitions 2 
-    sudo /usr/share/vboot/bin/make_dev_ssd.sh --force --remove_rootfs_verification 
+    if ! run_logged_command "Remove rootfs verification on partition 2" sudo /usr/share/vboot/bin/make_dev_ssd.sh --remove_rootfs_verification --partitions 2; then
+        return 1
+    fi
+    if ! run_logged_command "Force rootfs verification removal" sudo /usr/share/vboot/bin/make_dev_ssd.sh --force --remove_rootfs_verification; then
+        return 1
+    fi
     log_warn "Verification removed."
+    echo -e "${YELLOW}The system will restart in a few seconds${NC}"
+    sleep 0.5
+    countdown_reboot
+}
+
+function Remove_Verification_And_Clean_Logs() {
+    print_executing "Remove Verification + Clean Logs" 1.0
+    log_warn "Removing rootfs verification..."
+    if ! run_logged_command "Remove rootfs verification on partition 2" sudo /usr/share/vboot/bin/make_dev_ssd.sh --remove_rootfs_verification --partitions 2; then
+        return 1
+    fi
+    if ! run_logged_command "Force rootfs verification removal" sudo /usr/share/vboot/bin/make_dev_ssd.sh --force --remove_rootfs_verification; then
+        return 1
+    fi
+    log_success "Verification removed."
+	sleep 0.5
+
+    log_warn "Cleaning system logs..."
+    if ! run_logged_command "Remove system log directories" sudo rm -rf /var/log/ /var/log/spool/; then
+        return 1
+    fi
+    if ! run_logged_command "Run ChromeOS log cleanup" sudo chromeos-cleanup-logs; then
+        return 1
+    fi
+    log_success "Logs cleaned successfully."
     echo -e "${YELLOW}The system will restart in a few seconds${NC}"
     sleep 0.5
     countdown_reboot
@@ -546,7 +667,7 @@ function build_menu() {
             MENU_TEXT+=("    3) S5_Chrome Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_S5")
             MENU_TEXT+=("    4) S3 + S5_Chrome + Restart Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_MULTI")
             MENU_TEXT+=("    5) Capture Logs to USB Disk"); MENU_CMD+=("CMD_PCT_LOGS")
-            MENU_TEXT+=("    6) (Excute me before run PCT) Remove Verification"); MENU_CMD+=("CMD_RM_VERIFY")
+            MENU_TEXT+=("    6) (Excute me before run PCT) Remove Verification + Clean logs"); MENU_CMD+=("CMD_RM_VERIFY_CLEAN")
             MENU_TEXT+=("    7) Exit"); MENU_CMD+=("CMD_EXIT")
             ;;
     esac
@@ -580,16 +701,16 @@ function draw_full_menu() {
         top_border="╔══════════════════════════════════════════════════════╗"
         bot_border="╚══════════════════════════════════════════════════════╝"
         divider="────────────────────────────────────────────────────────"
-        title1="║          ChromeBook Validation Toolkit v1.01         ║"
-        title2="║               Created by DQA Connor_Wu               ║"
+        title1="║          ${TOOL_DISPLAY_NAME} ${TOOL_VERSION}         ║"
+        title2="║                Created by Connor Wu                  ║"
         tab_str="   ${t0}      ${t1}      ${t2}"
         footer="  ↑/↓,←/→:Navigate │ Enter:Select │ T:Theme │ D:Scale"
     elif [[ $SCALE_MODE -eq 1 ]]; then
         top_border="     ╔════════════════════════════════════════════════════════════════╗"
         bot_border="     ╚════════════════════════════════════════════════════════════════╝"
         divider="     ──────────────────────────────────────────────────────────────────"
-        title1="     ║               ChromeBook Validation Toolkit v1.01              ║"
-        title2="     ║                    Created by DQA Connor_Wu                    ║"
+        title1="     ║               ${TOOL_DISPLAY_NAME} ${TOOL_VERSION}              ║"
+        title2="     ║                     Created by Connor Wu                       ║"
         tab_str="        ${t0}          ${t1}          ${t2}"
         footer="       ↑/↓,←/→:Navigate  │  Enter:Select  │  T:Theme  │  D:Scale       "
     fi
@@ -673,6 +794,7 @@ while true; do
                     CMD_PCT_MULTI) Run_LinuxPCT_Stress "multitest.ini" "S3 + S5_Chrome + Restart Stress" ; PAUSE=1 ;;
                     CMD_PCT_LOGS) Capture_PCT_Logs ; PAUSE=1 ;;
                     CMD_RM_VERIFY) Remove_Verification_Unit_will_reboot ;;
+                    CMD_RM_VERIFY_CLEAN) Remove_Verification_And_Clean_Logs ;;
                     CMD_LOGS) Get_Generate_Logs ; PAUSE=1 ;;
                     CMD_CLEAN) Clean_Logs_And_Reboot ;;
                     CMD_CHECK_GBB) Check_GBB_Value ; PAUSE=1 ;;

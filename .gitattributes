@@ -1,0 +1,7 @@
+# Keep shell scripts POSIX-compatible across development environments.
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.ksh text eol=lf
+*.dash text eol=lf
+*.bats text eol=lf
