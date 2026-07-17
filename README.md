@@ -10,10 +10,6 @@ The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA eng
 
 This toolkit requires the official HP LinuxPCT tool for related functional tests. Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from this repository. Please reach out to HP TPM support or the original author to acquire the required files.
 
-License
-
-This project is for internal validation and development purposes. Third-party tools used alongside this toolkit remain the property of their respective owners.
-
 ## Features
 
 * **System Telemetry Monitoring**: Real-time status tracking during validation cycles.
@@ -26,6 +22,7 @@ This project is for internal validation and development purposes. Third-party to
 1. Clone this repository to your local machine.
 2. (Optional) Place the required HP LinuxPCT binaries into the same directory.
 3. Make the main script executable:
+
    ```bash
-   bash ./ChromeBook_Validation_Toolkit.sh
+   bash ./ChromeBook_Validation_Toolkit.sh'
 <img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/173db6c7-1b3c-45e6-8ba1-91f17341ba74" />

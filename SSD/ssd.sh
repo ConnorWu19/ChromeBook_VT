@@ -1,66 +1,70 @@
 #!/bin/bash
 
-# 補上缺失的變數定義
-LOCAL_TARGET="/usr/local/ChromeBook_HP_Stress_Toolkit/SSD"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/config.sh"
 
-# 確保本地端目錄結構存在
-sudo mkdir -p "$LOCAL_TARGET"
+if [[ ! -r "$CONFIG_FILE" ]]; then
+    echo "Configuration file not found: $CONFIG_FILE" >&2
+    exit 1
+fi
 
-if [ $? -eq 0 ]; then
-    echo "【Success】Script copy completed！"
-    # 確保後續腳本有權限讀寫該資料夾
-    sudo chmod -R 777 "$LOCAL_TARGET"
+# shellcheck source=../config.sh
+source "$CONFIG_FILE"
+
+function run_ssd_command() {
+    local description=$1
+    shift
+
+    if "$@"; then
+        return 0
+    else
+        local exit_code=$?
+        echo "[Error] ${description} failed (exit code: ${exit_code})." | tee -a "$SSD_LOG_FILE"
+        exit "$exit_code"
+    fi
+}
+
+if sudo mkdir -p "$SSD_SOURCE_DIR" "$SSD_WORK_DIR_1" "$SSD_WORK_DIR_2"; then
+    echo "[Success] SSD test directories are ready."
+    run_ssd_command "Set SSD directory permissions" sudo chmod -R 777 "$SSD_DIR"
 else
-    echo "【Error】File copy fail，Please check storage is enough space！"
+    mkdir_exit_code=$?
+    echo "[Error] Unable to prepare SSD test directories (exit code: ${mkdir_exit_code}). Check storage space and permissions." | tee -a "$SSD_LOG_FILE"
+    exit "$mkdir_exit_code"
+fi
+
+# Verify that the source asset copied by the deployment workflow is available.
+if [[ ! -f "$SSD_TEST_FILE" ]]; then
+    echo "[Error] SSD test file not found: $SSD_TEST_FILE"
     exit 1
 fi
 
-# =====================================================================
-# 2. 自動執行原有的 SSD 壓力測試引擎
-# =====================================================================
+# Reset working directories and seed the first copy.
+run_ssd_command "Clear SSD work directory 1" sudo rm -rf "$SSD_WORK_DIR_1"/*
+run_ssd_command "Clear SSD work directory 2" sudo rm -rf "$SSD_WORK_DIR_2"/*
+run_ssd_command "Seed SSD test file" sudo cp -a "$SSD_TEST_FILE" "$SSD_WORK_DIR_1/"
 
-a=0
-b=1
-#sudo mount -o remount,rw /
-
-# 核心防錯：驗證剛剛複製過來的原始影片是否存在
-if [ ! -f /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd/video.mp4 ]; then
-    echo "【Error】File not found in /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd/video.mp4，Please check the file is exist！"
-    exit 1
-fi
-
-# 清理暫存資料夾 (修正雙斜線問題)
-sudo rm -rf /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd1/*
-sudo rm -rf /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd2/*
-
-# 複製初始檔案
-sudo cp -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd/video.mp4 /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd1/
-
-# 初始化計數器
 cycle=1
 
-while [ "$a" != "$b" ]
-do
-# 輸出目前的 Cycle 數
-echo "=== Start Cycle: $cycle ===" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
+while true; do
+    echo "=== Start Cycle: $cycle ===" | tee -a "$SSD_LOG_FILE"
 
-sudo cp -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd1/video.mp4 /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd2/
-echo "Copy to ssd2 done $(date)" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
+    run_ssd_command "Copy test file to SSD work directory 2" sudo cp -a "$SSD_WORK_DIR_1/video.mp4" "$SSD_WORK_DIR_2/"
+    echo "Copy to ssd2 done $(date)" | tee -a "$SSD_LOG_FILE"
 
-sudo rm -f /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd1/video.mp4
-echo "Remove ssd1 done $(date)" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
+    run_ssd_command "Remove test file from SSD work directory 1" sudo rm -f "$SSD_WORK_DIR_1/video.mp4"
+    echo "Remove ssd1 done $(date)" | tee -a "$SSD_LOG_FILE"
 
-sudo cp -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd2/video.mp4 /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd1/
-echo "Copy back to ssd1 done $(date)" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
+    run_ssd_command "Copy test file back to SSD work directory 1" sudo cp -a "$SSD_WORK_DIR_2/video.mp4" "$SSD_WORK_DIR_1/"
+    echo "Copy back to ssd1 done $(date)" | tee -a "$SSD_LOG_FILE"
 
-sudo rm -f /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd2/video.mp4
-echo "Remove ssd2 done $(date)" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
+    run_ssd_command "Remove test file from SSD work directory 2" sudo rm -f "$SSD_WORK_DIR_2/video.mp4"
+    echo "Remove ssd2 done $(date)" | tee -a "$SSD_LOG_FILE"
 
-echo "=== End Cycle: $cycle ===" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
-echo "" | tee -a /usr/local/ChromeBook_HP_Stress_Toolkit/SSD/ssd_log
+    echo "=== End Cycle: $cycle ===" | tee -a "$SSD_LOG_FILE"
+    echo "" | tee -a "$SSD_LOG_FILE"
 
-# 計數器自動加 1
-cycle=$((cycle+1))
+    cycle=$((cycle+1))
 
-sleep 0.1
+    sleep 0.1
 done
