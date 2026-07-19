@@ -1,8 +1,7 @@
 # ChromeBook Validation Toolkit
-
 [繁體中文](README_zh.md)
 
-# About
+## About
 
 The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA engineering. It streamlines validation with integrated menus for LinuxPCT stress execution, multimedia testing, and system telemetry monitoring.
 
