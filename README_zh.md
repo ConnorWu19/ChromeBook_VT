@@ -1,20 +1,20 @@
-ChromeBook\_Validation\_Toolkit
+# ChromeBook\_Validation\_Toolkit
 
 
 
-\# 關於
+## 關於
 
 ChromeBook Validation Toolkit 是專為 DQA 工程設計的自動化診斷工具。它整合了 多媒體測試與系統狀態監控選單、LinuxPCT stress測試，藉此簡化驗證流程。
 
 
 
-\# 注意事項
+## 注意事項
 
 受限於保密協議 (NDA) 與授權規範，本專案檔不包含 LinuxPCT 執行檔，若要執行 LinuxPCT 測試，請聯繫 HP TPM 支援團隊或原作者取得所需檔案。
 
 
 
-\# 主要功能
+## 主要功能
 
 系統狀態監控： 在驗證週期內即時追蹤系統狀態。
 
@@ -26,7 +26,7 @@ LinuxPCT 壓力測試： 整合硬體壓力測試的自動化工作流程。
 
 
 
-\# 開始使用
+## 開始使用
 
 1\. 將此腳本 Clone 至本機端。
 
