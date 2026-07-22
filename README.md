@@ -26,5 +26,5 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 3. Make the main script executable in VT2.
 
    ```bash
-   bash ./ChromeBook_Validation_Toolkit.sh'
+   bash ./ChromeBook_Validation_Toolkit.sh
 <img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/173db6c7-1b3c-45e6-8ba1-91f17341ba74" />
