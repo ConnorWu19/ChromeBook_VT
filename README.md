@@ -21,8 +21,8 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 
 ## Getting Started
 
-1. Clone this repository from latest release to your local machine.
-2. (Optional) Place the required HP LinuxPCT binaries into the same directory.
+1. Download and extract the latest release to your local machine.
+2. (Optional) Place the required HP LinuxPCT binaries into the project directory.
 3. Make the main script executable in VT2.
 
    ```bash
