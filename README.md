@@ -23,7 +23,7 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 
 1. Clone this repository from latest release to your local machine.
 2. (Optional) Place the required HP LinuxPCT binaries into the same directory.
-3. Make the main script executable:
+3. Make the main script executable in VT2.
 
    ```bash
    bash ./ChromeBook_Validation_Toolkit.sh'
