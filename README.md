@@ -21,7 +21,7 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 
 ## Getting Started
 
-1. Clone this repository to your local machine.
+1. Clone this repository from latest to your local machine.
 2. (Optional) Place the required HP LinuxPCT binaries into the same directory.
 3. Make the main script executable:
 
