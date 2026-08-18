@@ -11,6 +11,25 @@ fi
 # shellcheck source=../config.sh
 source "$CONFIG_FILE"
 
+# Keep File Copy Test assets alongside the ssd.sh that is actually running.
+# This prevents a stale INSTALL_DIR value from creating or using an old toolkit path.
+SSD_DIR="${SCRIPT_DIR}/SSD"
+SSD_SOURCE_DIR="${SSD_DIR}/ssd"
+SSD_WORK_DIR_1="${SSD_DIR}/ssd1"
+SSD_WORK_DIR_2="${SSD_DIR}/ssd2"
+SSD_LOG_DIR="${SSD_DIR}/logs"
+SSD_LOG_FILE="${SSD_LOG_DIR}/ssd_$(date +'%Y%m%d_%H%M%S').log"
+SSD_TEST_FILE="${SSD_SOURCE_DIR}/video.mp4"
+
+# Keep one log per SSD stress-test run. Logs are intentionally retained and
+# never removed automatically so prior test evidence remains available.
+if ! sudo mkdir -p "$SSD_LOG_DIR"; then
+    echo "[Error] Unable to create SSD log directory: ${SSD_LOG_DIR}" >&2
+    exit 1
+fi
+
+echo "=== SSD Stress Test Started: $(date) ===" | tee -a "$SSD_LOG_FILE"
+
 function run_ssd_command() {
     local description=$1
     shift
@@ -26,7 +45,7 @@ function run_ssd_command() {
 
 if sudo mkdir -p "$SSD_SOURCE_DIR" "$SSD_WORK_DIR_1" "$SSD_WORK_DIR_2"; then
     echo "[Success] SSD test directories are ready."
-    run_ssd_command "Set SSD directory permissions" sudo chmod -R 777 "$SSD_DIR"
+    run_ssd_command "Set SSD directory permissions" sudo chmod -R 755 "$SSD_DIR"
 else
     mkdir_exit_code=$?
     echo "[Error] Unable to prepare SSD test directories (exit code: ${mkdir_exit_code}). Check storage space and permissions." | tee -a "$SSD_LOG_FILE"
