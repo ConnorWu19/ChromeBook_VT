@@ -37,6 +37,7 @@ THEME_INDEX=0
 SCALE_MODE=0
 UI_V_PAD=0
 UI_LEFT_PAD=""
+BENCHMARK_SKU_ID=""
 
 function apply_theme() {
     case $THEME_INDEX in
@@ -119,6 +120,75 @@ function run_logged_command() {
     fi
 }
 
+# Read a line without allowing terminal escape sequences to be printed as text.
+# Left/Right Arrow and Backspace are handled explicitly, including at line boundaries.
+function read_line_input() {
+    local prompt=$1
+    local result_var=$2
+    local input=""
+    local cursor=0
+    local key sequence sequence_key tail_length terminal_state
+
+    printf '%b' "$prompt"
+    terminal_state=$(stty -g)
+    stty -echo
+
+    while IFS= read -r -s -n 1 key; do
+        case "$key" in
+            "")
+                printf '\n'
+                break
+                ;;
+            $'\177'|$'\b')
+                if (( cursor > 0 )); then
+                    input="${input:0:cursor-1}${input:cursor}"
+                    ((cursor--))
+                fi
+                ;;
+            $'\e')
+                sequence=""
+                if IFS= read -r -s -n 1 -t 0.1 sequence_key; then
+                    sequence="$sequence_key"
+                    case "$sequence_key" in
+                        '[')
+                            # Consume a complete CSI sequence. Some VT2
+                            # modifier keys send longer sequences than arrows.
+                            while IFS= read -r -s -n 1 -t 0.05 sequence_key; do
+                                sequence+="$sequence_key"
+                                [[ "$sequence_key" =~ [@-~] ]] && break
+                            done
+                            ;;
+                        'O')
+                            IFS= read -r -s -n 1 -t 0.05 sequence_key && sequence+="$sequence_key"
+                            ;;
+                    esac
+                fi
+                case "$sequence" in
+                    '[D'|'OD') (( cursor > 0 )) && ((cursor--)) ;;
+                    '[C'|'OC') (( cursor < ${#input} )) && ((cursor++)) ;;
+                esac
+                ;;
+            '?')
+                # Some VT2 keyboard mappings report Caps Lock as '?'
+                # while this reader is in raw mode. Ignore that modifier key.
+                ;;
+            *)
+                if [[ "$key" =~ [[:print:]] ]]; then
+                    input="${input:0:cursor}${key}${input:cursor}"
+                    ((cursor++))
+                fi
+                ;;
+        esac
+
+        tail_length=$((${#input} - cursor))
+        printf '\r\033[K%b%s' "$prompt" "$input"
+        (( tail_length > 0 )) && printf '\033[%dD' "$tail_length"
+    done
+
+    stty "$terminal_state"
+    printf -v "$result_var" '%s' "$input"
+}
+
 function draw_progress_bar() {
     local duration=$1
     local prefix=$2
@@ -155,9 +225,11 @@ function open_url() {
         log_error "Unable to open the test URL. Check the ChromeOS URL handler service."
         return 1
     fi
-    
-    log_success "URL Opened Successfully."
-    log_warn "Please manually switch to VT1 by pressing CTRL+ALT+F1"
+
+    if [[ "${2:-}" != "--quiet" ]]; then
+        log_success "URL Opened Successfully."
+        log_warn "Please manually switch to VT1 by pressing CTRL+ALT+F1"
+    fi
 }
 
 function update_sysinfo() {
@@ -231,9 +303,38 @@ function update_sysinfo() {
             fi
             [[ -z "$usb_brand" ]] && usb_brand="$usb_name"
         fi
-        
-        local line1="\033[K${UI_LEFT_PAD}${CYAN}  [Net] ${net_color}${net_type}${NC}  ${CYAN}[Power] ${NC}${pwr_info}  ${CYAN}[OS] ${GREEN}${os_info}${NC}"
-        local line2="\033[K${UI_LEFT_PAD}${CYAN}  [GBB] ${GREEN}${gbb_val}${NC}  ${CYAN} [USB] ${GREEN}${usb_brand}${NC}"
+
+        local bios_fw
+        bios_fw=$(crossystem fwid 2>/dev/null | xargs)
+        [[ -z "$bios_fw" ]] && bios_fw="N/A"
+
+        # Use one shared column so BIOS FW is directly below OS, regardless of USB name length.
+local raw_pwr_info=$(echo -e "$pwr_info" | sed 's/\x1B\[[0-9;]*[a-zA-Z]//g')
+
+        local gap=$(( ${#net_type} - ${#gbb_val} ))
+        local net_pad="  " gbb_pad="  "
+        if (( gap > 0 )); then printf -v gbb_pad '%*s' $((2 + gap)) ''; fi
+        if (( gap < 0 )); then printf -v net_pad '%*s' $((2 - gap)) ''; fi
+
+        local os_column_raw="  [Net] ${net_type}${net_pad}[Power] ${raw_pwr_info}"
+        local bios_column_raw="  [GBB] ${gbb_val}${gbb_pad}[USB] ${usb_brand}"
+
+        local max_prefix_len=${#os_column_raw}
+        if (( ${#bios_column_raw} > max_prefix_len )); then
+            max_prefix_len=${#bios_column_raw}
+        fi
+
+        local align_target=$(( max_prefix_len + 2 ))
+
+        local os_padding_width=$(( align_target - ${#os_column_raw} ))
+        local bios_padding_width=$(( align_target - ${#bios_column_raw} ))
+
+        local os_padding="" bios_fw_padding=""
+        if (( os_padding_width > 0 )); then printf -v os_padding '%*s' "$os_padding_width" ''; fi
+        if (( bios_padding_width > 0 )); then printf -v bios_fw_padding '%*s' "$bios_padding_width" ''; fi
+
+        local line1="\033[K${UI_LEFT_PAD}${CYAN}  [Net] ${net_color}${net_type}${NC}${net_pad}${CYAN}[Power] ${NC}${pwr_info}${os_padding}${CYAN}[OS] ${GREEN}${os_info}${NC}"
+        local line2="\033[K${UI_LEFT_PAD}${CYAN}  [GBB] ${GREEN}${gbb_val}${NC}${gbb_pad}${CYAN}[USB] ${GREEN}${usb_brand}${NC}${bios_fw_padding}${CYAN}[BIOS FW] ${GREEN}${bios_fw}${NC}"
         local new_sysinfo="${line1}\n${line2}"
         
         if [[ "$new_sysinfo" != "$CACHED_SYSINFO" ]]; then
@@ -268,16 +369,21 @@ function countdown_poweroff() {
 
 function Copy_To_DUT() {
     print_executing "Copy Tool to DUT" 1.0
-    
-    local USB_NAME=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
+
+    local TARGET_DIR="$INSTALL_DIR"
+    local USB_NAME
+    USB_NAME=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
     if [[ -z "$USB_NAME" ]]; then
+        if [[ "$SCRIPT_DIR" == "$TARGET_DIR" ]]; then
+            log_info "Toolkit is already running from ${TARGET_DIR}. USB drive is not required; copy skipped."
+            return 0
+        fi
         log_error "No flash drive detected. Please confirm that the device is mounted."
         return 1
     fi
     
     log_info "USB flash drive detected: ${USB_NAME}"
     local USB_TOOL_DIR="${USB_MOUNT_BASE_DIR}/${USB_NAME}/${USB_FOLDER_NAME}"
-    local TARGET_DIR="$INSTALL_DIR"
     
     if [[ -d "$USB_TOOL_DIR" ]]; then
         log_info "Copying files to /usr/local/ (This may take a while...)"
@@ -291,7 +397,7 @@ function Copy_To_DUT() {
             return 1
         fi
 
-        if ! run_logged_command "Set toolkit permissions" sudo chmod -R 777 "$TARGET_DIR"; then
+        if ! run_logged_command "Set toolkit permissions" sudo chmod -R 755 "$TARGET_DIR"; then
             return 1
         fi
 
@@ -319,8 +425,7 @@ function Check_GBB_Value() {
     echo "  3) Cancel"
     
     while true; do
-        echo -ne "Select an option [1/2/3] and press Enter: "
-        read -r k
+        read_line_input "Select an option [1/2/3] and press Enter: " k
         case "$k" in
             1)
                 if ! run_logged_command "Set GBB flags to 0x39" sudo futility gbb -s --flash --flags 0x39; then
@@ -359,15 +464,15 @@ function Online_FHD_Video_Test() {
         case "$vid_opt" in
             1)
                 print_executing "Online FHD Video Sample 1" 0.4
-                open_url "https://www.youtube.com/watch?v=RHUauMcYlX0"
+                open_url "$TEST_URL_FHD_1"
                 break ;;
             2)
                 print_executing "Online FHD Video Sample 2" 0.4
-                open_url "https://www.youtube.com/watch?v=rEKifG2XUZg"
+                open_url "$TEST_URL_FHD_2"
                 break ;;
             3)
                 print_executing "Online FHD Video Sample 3" 0.4
-                open_url "https://www.youtube.com/watch?v=uZkaJ3e9nfY"
+                open_url "$TEST_URL_FHD_3"
                 break ;;
             4|q|Q)
                 log_info "Canceled"
@@ -379,11 +484,238 @@ function Online_FHD_Video_Test() {
     done
 }
 
-function HTML5_Video_Test() { print_executing "HTML5 Video Test" 0.4; open_url "https://legacy.videojs.org/city"; }
-function WebGL_Test() { print_executing "WebGL Test" 0.4; open_url "https://webglsamples.org/aquarium/aquarium.html"; }
-function Webcam_Nic_Wlan_Test() { print_executing "Webcam_Nic_or_Wlan" 0.4; open_url "https://webcamtests.com/"; }
+function HTML5_Video_Test() { print_executing "HTML5 Video Test" 0.4; open_url "$TEST_URL_HTML5_VIDEO"; }
+function WebGL_Test() { print_executing "WebGL Test" 0.4; open_url "$TEST_URL_WEBGL"; }
+function Webcam_Nic_Wlan_Test() { print_executing "Webcam_Nic_or_Wlan" 0.4; open_url "$TEST_URL_WEBCAM"; }
+
+function capture_benchmark_screenshot() {
+    local test_name=$1
+    local result_var=${2:-}
+    local safe_test_name power_source filename_base captured_screenshot_path
+    local duplicate_index=2
+
+    safe_test_name=$(printf '%s' "$test_name" | tr '[:space:]' '_' | tr -cd '[:alnum:]_.-')
+    [[ "$test_name" == "WebXPRT 4" ]] && safe_test_name="WebXPRT4"
+    [[ "$test_name" == "Google Octane 2.0" ]] && safe_test_name="Google Octane 2.0"
+    power_source="Unknown"
+    if command -v dump_power_status >/dev/null 2>&1; then
+        if [[ "$(dump_power_status 2>/dev/null | awk '/line_power_connected/ {print $2; exit}')" == "1" ]]; then
+            power_source="AC"
+        else
+            power_source="DC"
+        fi
+    fi
+    if ! sudo -u chronos mkdir -p "$BENCHMARK_SCREENSHOT_DIR"; then
+        echo "[$(date +'%H:%M:%S')] [ERROR] Unable to create benchmark screenshot directory: ${BENCHMARK_SCREENSHOT_DIR}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    filename_base="${safe_test_name}_${BENCHMARK_SKU_ID}_${power_source}"
+    captured_screenshot_path="${BENCHMARK_SCREENSHOT_DIR}/${filename_base}.png"
+    while [[ -e "$captured_screenshot_path" ]]; do
+        captured_screenshot_path="${BENCHMARK_SCREENSHOT_DIR}/${filename_base}(${duplicate_index}).png"
+        ((duplicate_index++))
+    done
+
+    # The user has switched from the toolkit on VT2 to the benchmark page on
+    # VT1. Capture the currently visible full screen without changing VTs.
+    if sudo "${SCRIPT_DIR}/lib/screenshot" --internal "$captured_screenshot_path" >> "$LOG_FILE" 2>&1; then
+        sudo chown chronos:chronos "$captured_screenshot_path" >> "$LOG_FILE" 2>&1 || true
+        echo "[$(date +'%H:%M:%S')] [SUCCESS] Benchmark screenshot saved: ${captured_screenshot_path} (Power: ${power_source})" >> "$LOG_FILE"
+        if [[ -n "$result_var" ]]; then
+            printf -v "$result_var" '%s' "$captured_screenshot_path"
+        fi
+    else
+        echo "[$(date +'%H:%M:%S')] [ERROR] Benchmark screenshot capture failed." >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+function extract_webxprt_test_id_from_screenshot() {
+    local screenshot_path=$1
+    local ocr_text normalized_text test_id
+
+    # OCR is shipped as a static ARM64 executable in lib/. Files copied from
+    # Windows can lose their Linux executable bit, so restore it when possible.
+    if [[ -f "$WEBXPRT_OCR_COMMAND" && ! -x "$WEBXPRT_OCR_COMMAND" ]]; then
+        chmod +x "$WEBXPRT_OCR_COMMAND" 2>> "$LOG_FILE" || true
+    fi
+
+    if ! command -v "$WEBXPRT_OCR_COMMAND" >/dev/null 2>&1; then
+        echo "[$(date +'%H:%M:%S')] [ERROR] WebXPRT OCR command is unavailable: ${WEBXPRT_OCR_COMMAND}" >> "$LOG_FILE"
+        return 127
+    fi
+
+    if [[ ! -r "${WEBXPRT_OCR_TESSDATA_DIR}/${WEBXPRT_OCR_LANGUAGE}.traineddata" ]]; then
+        echo "[$(date +'%H:%M:%S')] [ERROR] WebXPRT OCR language data is unavailable: ${WEBXPRT_OCR_TESSDATA_DIR}/${WEBXPRT_OCR_LANGUAGE}.traineddata" >> "$LOG_FILE"
+        return 1
+    fi
+
+    if ! ocr_text=$("$WEBXPRT_OCR_COMMAND" "$screenshot_path" stdout \
+        --tessdata-dir "$WEBXPRT_OCR_TESSDATA_DIR" -l "$WEBXPRT_OCR_LANGUAGE" \
+        --psm "$WEBXPRT_OCR_PAGE_SEGMENT_MODE" 2>> "$LOG_FILE"); then
+        echo "[$(date +'%H:%M:%S')] [ERROR] OCR failed for WebXPRT screenshot: ${screenshot_path}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    # OCR can split the label and number across lines, so normalize whitespace
+    # before requiring the exact seven-digit Test ID format.
+    normalized_text=$(printf '%s' "$ocr_text" | tr '\r\n\t' '   ' | tr -s ' ')
+    if [[ "$normalized_text" =~ [Tt][Ee][Ss][Tt][[:space:]]*[Ii1l][Dd][[:space:]:#=-]*([0-9]{7})([^0-9]|$) ]]; then
+        test_id=${BASH_REMATCH[1]}
+    else
+        echo "[$(date +'%H:%M:%S')] [ERROR] No seven-digit WebXPRT Test ID found by OCR in: ${screenshot_path}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    printf '%s\n' "$test_id"
+}
+
+function download_webxprt_result_csv() {
+    local test_id=$1
+    local screenshot_path=${2:-}
+    local result_basename result_url result_path temporary_path
+
+    if ! [[ "$test_id" =~ ^[0-9]{7}$ ]]; then
+        echo "[$(date +'%H:%M:%S')] [ERROR] Refusing to download WebXPRT result with invalid Test ID: ${test_id}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    if ! sudo -u chronos mkdir -p "$WEBXPRT_RESULT_DOWNLOAD_DIR" >> "$LOG_FILE" 2>&1; then
+        echo "[$(date +'%H:%M:%S')] [ERROR] Unable to create WebXPRT result directory: ${WEBXPRT_RESULT_DOWNLOAD_DIR}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    result_url="${WEBXPRT_RESULT_DOWNLOAD_URL}?c=${test_id}&testtype=1"
+    result_basename=$(basename "${screenshot_path%.png}")
+    if [[ "$result_basename" == WebXPRT4_* ]]; then
+        result_path="${WEBXPRT_RESULT_DOWNLOAD_DIR}/${result_basename}_${test_id}.csv"
+    else
+        result_path="${WEBXPRT_RESULT_DOWNLOAD_DIR}/WebXPRT4_${test_id}.csv"
+    fi
+    temporary_path="${result_path}.download"
+
+    if command -v curl >/dev/null 2>&1; then
+        if ! sudo -u chronos curl --fail --location --retry 2 --connect-timeout 15 \
+            --output "$temporary_path" "$result_url" >> "$LOG_FILE" 2>&1; then
+            sudo -u chronos rm -f -- "$temporary_path" >> "$LOG_FILE" 2>&1 || true
+            echo "[$(date +'%H:%M:%S')] [ERROR] WebXPRT CSV download failed for Test ID: ${test_id}" >> "$LOG_FILE"
+            return 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! sudo -u chronos wget --quiet --output-document="$temporary_path" "$result_url" >> "$LOG_FILE" 2>&1; then
+            sudo -u chronos rm -f -- "$temporary_path" >> "$LOG_FILE" 2>&1 || true
+            echo "[$(date +'%H:%M:%S')] [ERROR] WebXPRT CSV download failed for Test ID: ${test_id}" >> "$LOG_FILE"
+            return 1
+        fi
+    else
+        echo "[$(date +'%H:%M:%S')] [ERROR] Neither curl nor wget is available for WebXPRT CSV download." >> "$LOG_FILE"
+        return 127
+    fi
+
+    if ! sudo -u chronos test -s "$temporary_path"; then
+        sudo -u chronos rm -f -- "$temporary_path" >> "$LOG_FILE" 2>&1 || true
+        echo "[$(date +'%H:%M:%S')] [ERROR] WebXPRT returned an empty CSV for Test ID: ${test_id}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    if ! sudo -u chronos mv -f -- "$temporary_path" "$result_path" >> "$LOG_FILE" 2>&1; then
+        echo "[$(date +'%H:%M:%S')] [ERROR] Unable to save WebXPRT CSV: ${result_path}" >> "$LOG_FILE"
+        return 1
+    fi
+
+    echo "[$(date +'%H:%M:%S')] [SUCCESS] WebXPRT CSV saved: ${result_path} (Test ID: ${test_id})" >> "$LOG_FILE"
+}
+
+function process_webxprt_result_screenshot() {
+    local screenshot_path=$1
+    local test_id
+
+    if ! test_id=$(extract_webxprt_test_id_from_screenshot "$screenshot_path"); then
+        return 1
+    fi
+
+    download_webxprt_result_csv "$test_id" "$screenshot_path"
+}
+
+function schedule_benchmark_screenshot() {
+    local test_name=$1
+    local delay_seconds=${2:-1800}
+    local post_capture_handler=${3:-}
+
+    if ! [[ "$delay_seconds" =~ ^[0-9]+$ ]] || (( delay_seconds == 0 )); then
+        log_warn "Invalid benchmark screenshot delay (${delay_seconds}); automatic screenshot was not scheduled."
+        return 1
+    fi
+
+    if [[ ! -x "${SCRIPT_DIR}/lib/screenshot" ]]; then
+        log_warn "Bundled screenshot command is unavailable; automatic screenshot was not scheduled."
+        return 1
+    fi
+
+    (
+        sleep "$delay_seconds"
+        local screenshot_path
+        if capture_benchmark_screenshot "$test_name" screenshot_path && [[ -n "$post_capture_handler" ]]; then
+            "$post_capture_handler" "$screenshot_path"
+        fi
+    ) &
+
+    log_info "Full-screen screenshot scheduled in $((delay_seconds / 60)) minute(s). Keep the benchmark page on VT1."
+}
+
+function Run_Benchmark_Test() {
+    local test_name=$1
+    local test_url=$2
+    local schedule_screenshot=${3:-true}
+    local screenshot_delay_seconds=${4:-1800}
+    local post_capture_handler=${5:-}
+    local raw_sku_id
+
+    while true; do
+        read_line_input "Please input your unit SKU ID, Ex.SKU1-1#02: " raw_sku_id
+        BENCHMARK_SKU_ID=$(printf '%s' "$raw_sku_id" | tr -cd '[:alnum:]_.#-')
+        if [[ -n "$BENCHMARK_SKU_ID" ]]; then
+            break
+        fi
+        echo -e "${RED}SKU ID is required. Use letters, numbers, '.', '_', '-', or '#'.${NC}"
+    done
+
+    echo "[$(date +'%H:%M:%S')] [EXEC] ${test_name} (SKU: ${BENCHMARK_SKU_ID})" >> "$LOG_FILE"
+    draw_progress_bar 0.4 "$test_name"
+
+    if ! open_url "$test_url" --quiet; then
+        return 1
+    fi
+
+    echo -e "${GREEN}[+] Execution Completed.${NC}"
+    log_success "URL Opened Successfully."
+    if [[ "$schedule_screenshot" == "true" ]]; then
+        schedule_benchmark_screenshot "$test_name" "$screenshot_delay_seconds" "$post_capture_handler"
+        log_warn "Please manually switch to VT1 by pressing CTRL+ALT+F1 and keep the benchmark page visible until capture."
+    else
+        log_info "Automatic screenshot is disabled for ${test_name}; download the benchmark result manually after it finishes."
+        log_warn "Please manually switch to VT1 by pressing CTRL+ALT+F1."
+    fi
+}
+
+function WebXPRT_4_Test() {
+    log_info "At 1,000 seconds, WebXPRT 4 captures VT1, OCRs the seven-digit Test ID, and downloads the CSV automatically."
+    if [[ -f "$WEBXPRT_OCR_COMMAND" && ! -x "$WEBXPRT_OCR_COMMAND" ]]; then
+        chmod +x "$WEBXPRT_OCR_COMMAND" 2>> "$LOG_FILE" || true
+    fi
+    if ! command -v "$WEBXPRT_OCR_COMMAND" >/dev/null 2>&1; then
+        log_warn "${WEBXPRT_OCR_COMMAND} is unavailable. The screenshot will be saved, but automatic CSV download will fail until OCR is bundled."
+    elif [[ ! -r "${WEBXPRT_OCR_TESSDATA_DIR}/${WEBXPRT_OCR_LANGUAGE}.traineddata" ]]; then
+        log_warn "${WEBXPRT_OCR_LANGUAGE}.traineddata is unavailable in ${WEBXPRT_OCR_TESSDATA_DIR}. The screenshot will be saved, but automatic CSV download will fail."
+    fi
+    Run_Benchmark_Test "WebXPRT 4" "$TEST_URL_WEBXPRT_4" true "${BENCHMARK_SCREENSHOT_DELAY_WEBXPRT_4_SECONDS:-1000}" process_webxprt_result_screenshot
+}
+function Google_Octane_2_Test() { Run_Benchmark_Test "Google Octane 2.0" "$TEST_URL_GOOGLE_OCTANE_2" true "${BENCHMARK_SCREENSHOT_DELAY_GOOGLE_OCTANE_2_SECONDS:-900}"; }
+function Speedometer_2_Test() { Run_Benchmark_Test "Speedometer 2.0" "$TEST_URL_SPEEDOMETER_2" true "${BENCHMARK_SCREENSHOT_DELAY_SPEEDOMETER_2_SECONDS:-1800}"; }
 
 function File_Copy_Test_Menu() {
+    FILE_COPY_REBOOT_REQUESTED=0
     stty echo
     tput cnorm
 
@@ -392,16 +724,14 @@ function File_Copy_Test_Menu() {
     while true; do
         clear
         echo -e "\n${CYAN}=======================================================${NC}"
-        echo -e "${YELLOW}💡 Run [1] => [2] before start file copy test${NC}"
+        echo -e "${YELLOW}[TIP] Run [1] => [2] before starting the file copy test${NC}"
         echo -e "${CYAN}=======================================================${NC}"
         echo "  1. Remove Rootfs_Verification"
         echo "  2. Copy Script to DUT"
         echo "  3. Run File Copy Test"
         echo "  4. Cancel"
         echo -e "${CYAN}=======================================================${NC}"
-        echo -ne "Select an option [1/2/3/4] and press Enter: "
-        
-        read -r copy_opt
+        read_line_input "Select an option [1/2/3/4] and press Enter: " copy_opt
 
         case "$copy_opt" in
             1)
@@ -411,13 +741,16 @@ function File_Copy_Test_Menu() {
                     return 1
                 fi
                 log_warn "Verification removed. System must reboot now."
-                countdown_reboot
+                if countdown_reboot; then
+                    FILE_COPY_REBOOT_REQUESTED=1
+                else
+                    return 1
+                fi
                 break ;;
             2)
                 echo ""
                 Copy_To_DUT
-                echo -ne "\n${MAGENTA}Press [Enter] to return to menu...${NC}"
-                read -r wait_key
+                read_line_input "\n${MAGENTA}Press [Enter] to return to menu...${NC}" wait_key
                 ;;
             3)
                 echo ""
@@ -438,10 +771,60 @@ function File_Copy_Test_Menu() {
     stty -echo
 }
 
+function Benchmark_Test_Menu() {
+    stty echo
+    tput cnorm
+
+    echo "[$(date +'%H:%M:%S')] [EXEC] Benchmark Test Menu" >> "$LOG_FILE"
+
+    while true; do
+        clear
+        echo -e "\n${CYAN}=======================================================${NC}"
+        echo -e "${YELLOW}                    Benchmark Test${NC}"
+        echo -e "${CYAN}=======================================================${NC}"
+        echo "  1. WebXPRT 4"
+        echo "  2. Google Octane 2.0"
+        echo "  3. Speedometer 2.0"
+        echo "  4. Cancel"
+        echo -e "${CYAN}=======================================================${NC}"
+        read_line_input "Select an option [1/2/3/4] and press Enter: " benchmark_opt
+
+        case "$benchmark_opt" in
+            1)
+                WebXPRT_4_Test
+                read_line_input "\n${MAGENTA}Press [Enter] to return to Benchmark Test menu...${NC}" wait_key
+                sleep 0.4
+                ;;
+            2)
+                Google_Octane_2_Test
+                read_line_input "\n${MAGENTA}Press [Enter] to return to Benchmark Test menu...${NC}" wait_key
+                sleep 0.4
+                ;;
+            3)
+                Speedometer_2_Test
+                read_line_input "\n${MAGENTA}Press [Enter] to return to Benchmark Test menu...${NC}" wait_key
+                sleep 0.4
+                ;;
+            4|q|Q)
+                echo ""
+                log_info "Benchmark Test Canceled."
+                break ;;
+            *)
+                echo -e "\n${RED}Invalid option, please try again.${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+
+    tput civis
+    stty -echo
+}
+
 function Run_Internal_SSD_Stress() {
     print_executing "Initializing File Copy Test" 0.5
     
     local ssd_script="${SSD_DIR}/ssd.sh"
+    local ssd_log_file
 
     if [[ -f "$ssd_script" ]]; then
         if ! run_logged_command "Set SSD test script permissions" sudo chmod +x "$ssd_script"; then
@@ -451,7 +834,12 @@ function Run_Internal_SSD_Stress() {
         sudo "$ssd_script"
         local ssd_exit_code=$?
         if [[ $ssd_exit_code -ne 0 ]]; then
-            log_error "SSD stress test stopped unexpectedly (exit code: ${ssd_exit_code}). See ${LOG_FILE}."
+            ssd_log_file=$(sudo ls -1t "${SSD_LOG_DIR}"/ssd_*.log 2>/dev/null | head -n 1)
+            if [[ -n "$ssd_log_file" ]]; then
+                log_error "SSD stress test stopped unexpectedly (exit code: ${ssd_exit_code}). See SSD log: ${ssd_log_file}."
+            else
+                log_error "SSD stress test stopped unexpectedly (exit code: ${ssd_exit_code}). See SSD logs: ${SSD_LOG_DIR}."
+            fi
             return "$ssd_exit_code"
         fi
 
@@ -484,13 +872,23 @@ function Capture_PCT_Logs() {
     
     local log_dir="$PCT_LOG_DIR"
     if [[ -d "$log_dir" ]]; then
+        local pct_log_source="${log_dir}/FFFFFFFF"
+        if [[ ! -d "$pct_log_source" ]]; then
+            log_error "PCT log directory not found: $pct_log_source"
+            return 1
+        fi
+
         local usb_name=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
-            if ! run_logged_command "Copy LinuxPCT logs to USB" sudo cp -a -p --no-preserve=ownership "$log_dir" "${USB_MOUNT_BASE_DIR}/${usb_name}/"; then
+            local usb_pct_log_dir="${USB_MOUNT_BASE_DIR}/${usb_name}/LinuxPCT_log/Log"
+            if ! run_logged_command "Create LinuxPCT_log directory on USB" sudo mkdir -p "$usb_pct_log_dir"; then
+                return 1
+            fi
+            if ! run_logged_command "Copy LinuxPCT logs to USB" sudo cp -a -p --no-preserve=ownership "$pct_log_source" "$usb_pct_log_dir/"; then
                 return 1
             fi
 
-            log_success "Logs successfully copied to USB disk (${usb_name})."
+            log_success "Logs successfully copied to external USB disk/LinuxPCT_log (${usb_name})."
         else
             log_warn "USB disk not found in ${USB_MOUNT_BASE_DIR}, logs only copied to Downloads."
         fi
@@ -546,9 +944,7 @@ function Get_Generate_Logs() {
         fi
         
         echo ""
-        echo -ne "${YELLOW}Enter custom folder name to save log file: ${NC}"
-        # Use Bash readline so Backspace edits the input instead of being stored as a control character.
-        read -e -r custom_folder
+        read_line_input "${YELLOW}Enter custom folder name to save log file: ${NC}" custom_folder
         
         if [[ -z "$custom_folder" ]]; then
             custom_folder="Debug_Log_$(date +%Y%m%d_%H%M%S)"
@@ -562,7 +958,7 @@ function Get_Generate_Logs() {
         if ! run_logged_command "Copy generated log to Downloads" sudo cp -a -p --no-preserve=ownership "$latest_log" "$dl_target_dir/"; then
             return 1
         fi
-        if ! run_logged_command "Set Downloads log permissions" sudo chmod -R 777 "$dl_target_dir"; then
+        if ! run_logged_command "Set Downloads log permissions" sudo chmod -R 755 "$dl_target_dir"; then
             return 1
         fi
         log_success "Logs saved to Downloads: $custom_folder/$(basename "$latest_log")"
@@ -576,7 +972,7 @@ function Get_Generate_Logs() {
             if ! run_logged_command "Copy generated log to USB" sudo cp -a -p --no-preserve=ownership "$latest_log" "$usb_target_dir/"; then
                 return 1
             fi
-            if ! run_logged_command "Set USB log permissions" sudo chmod -R 777 "$usb_target_dir"; then
+            if ! run_logged_command "Set USB log permissions" sudo chmod -R 755 "$usb_target_dir"; then
                 return 1
             fi
             log_success "Logs successfully copied to USB disk [${usb_name}]: $custom_folder/"
@@ -659,7 +1055,8 @@ function build_menu() {
             MENU_TEXT+=("    3) WebGL Test"); MENU_CMD+=("CMD_WEBGL")
             MENU_TEXT+=("    4) Webcam w/ NIC or WLAN Test (Cover AC/DC Mode)"); MENU_CMD+=("CMD_WEBCAM")
             MENU_TEXT+=("    5) File Copy Test [HWQA]"); MENU_CMD+=("CMD_FILE_COPY_TEST")
-            MENU_TEXT+=("    6) Exit"); MENU_CMD+=("CMD_EXIT")
+            MENU_TEXT+=("    6) Benchmark Test"); MENU_CMD+=("CMD_BENCHMARK_TEST")
+            MENU_TEXT+=("    7) Exit"); MENU_CMD+=("CMD_EXIT")
             ;;
         2)
             MENU_TEXT+=("    1) S3 Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_S3")
@@ -787,7 +1184,11 @@ while true; do
                     CMD_HTML5) HTML5_Video_Test ; PAUSE=1 ;;
                     CMD_WEBGL) WebGL_Test ; PAUSE=1 ;;
                     CMD_WEBCAM) Webcam_Nic_Wlan_Test ; PAUSE=1 ;;
-                    CMD_FILE_COPY_TEST) File_Copy_Test_Menu ; PAUSE=1 ;;
+                    CMD_FILE_COPY_TEST)
+                        File_Copy_Test_Menu
+                        if [[ "$FILE_COPY_REBOOT_REQUESTED" -ne 1 ]]; then PAUSE=1; fi
+                        ;;
+                    CMD_BENCHMARK_TEST) Benchmark_Test_Menu ; PAUSE=1 ;;
                     CMD_PCT_S3) Run_LinuxPCT_Stress "s3.ini" "S3 Stress (1000 cycles)" ; PAUSE=1 ;;
                     CMD_PCT_RESTART) Run_LinuxPCT_Stress "restart.ini" "Restart Stress (1000 cycles)" ; PAUSE=1 ;;
                     CMD_PCT_S5) Run_LinuxPCT_Stress "s5_chrome.ini" "S5 Chrome Stress (1000 cycles)" ; PAUSE=1 ;;
@@ -795,7 +1196,13 @@ while true; do
                     CMD_PCT_LOGS) Capture_PCT_Logs ; PAUSE=1 ;;
                     CMD_RM_VERIFY) Remove_Verification_Unit_will_reboot ;;
                     CMD_RM_VERIFY_CLEAN) Remove_Verification_And_Clean_Logs ;;
-                    CMD_LOGS) Get_Generate_Logs ; PAUSE=1 ;;
+                    CMD_LOGS)
+                        read_line_input "${YELLOW}Are you sure you want to run Get Generate logs? [y/n]: ${NC}" confirm_generate_logs
+                        case "$confirm_generate_logs" in
+                            [yY]) Get_Generate_Logs ; PAUSE=1 ;;
+                            *) log_info "Get Generate Logs cancelled." ; PAUSE=1 ;;
+                        esac
+                        ;;
                     CMD_CLEAN) Clean_Logs_And_Reboot ;;
                     CMD_CHECK_GBB) Check_GBB_Value ; PAUSE=1 ;;
                     CMD_REBOOT) countdown_reboot ;;
