@@ -27,4 +27,4 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 
    ```bash
    bash ./ChromeBook_Validation_Toolkit.sh
-<img width="981" height="649" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
+<img width="860" height="545" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
