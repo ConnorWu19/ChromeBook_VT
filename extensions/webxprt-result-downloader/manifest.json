@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "CBVT WebXPRT Result Downloader",
+  "version": "1.0.0",
+  "description": "Downloads the WebXPRT 4 CSV result while keeping the score page open.",
+  "permissions": [
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://www.principledtechnologies.com/benchmarkxprt/webxprt/2021/wx4_build_3_7_3/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.principledtechnologies.com/benchmarkxprt/webxprt/2021/wx4_build_3_7_3/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
