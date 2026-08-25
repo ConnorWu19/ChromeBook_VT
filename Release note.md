@@ -14,8 +14,8 @@ ChromeBook_Validation_Toolkit v1.03
   3. Uses OCR to read the Test ID displayed on the WebXPRT screen and automatically downloads the test result based on the Test ID.
 * Added a dedicated SSD test log. Log path: SSD/logs/ssd_YYYYMMDD_HHMMSS.log.
 * Added a confirmation prompt after selecting Get Generate Logs:
-   Are you sure you want to run Get Generate logs? [y/n]
-   The operation will only proceed when y or Y is entered.
+  Are you sure you want to run Get Generate logs? [y/n]
+  The operation will only proceed when y or Y is entered.
 
 🔧 Changed
 
