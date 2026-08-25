@@ -1,35 +1,92 @@
-2026/07/17
+2026/08/24
 
-\*ChromeBook\_Validation\_Toolkit v1.02
+
+
+\## v1.03 Release Note
+
+
 
 🚀 新增
 
-* 新增共用的 config.sh，統一管理工具包版本、安裝目錄、USB 掛載點、Log位置和 SSD 測試路徑，之後改設定不用再到處找。
-* 加入 .gitattributes，強制 shell 腳本統一用 LF 換行。
+&#x20; - Capture PCT Logs 時，USB 會自動建立 LinuxPCT\_log 資料夾,並儲存至USB/LinuxPCT\_log/Log/FFFFFFFF。
+
+&#x20; - Info Monitor 新增 \[BIOS FW] 欄位，透過 crossystem fwid 顯示機台 BIOS／FW 版號。
+
+&#x20; - Multimedia 新增 Benchmark Test 子選單：
+
+&#x20;     - WebXPRT 4
+
+&#x20;     - Google Octane 2.0
+
+&#x20;     - Speedometer 2.0
+
+&#x20; - 新增 Benchmark 自動截圖與結果處理功能：
+
+&#x20;   各測項開啟後（Google Octane 2.0: 120s / Speedometer 2.0: 120s / WebXPRT 4: 1000s）自動截取 VT1 全螢幕並存至 Downloads/Benchmark\_Screenshots。
+
+&#x20;   支援依 SKU／AC-DC 規則自動命名，並透過 OCR 讀取 WebXPRT 畫面上的 Test ID，再依 Test ID 自動下載測試結果。
+
+&#x20; - 新增 SSD 測試獨立 Log, path: SSD/logs/ssd\_YYYYMMDD\_HHMMSS.log。
+
+&#x20; - Get Generate Logs 選取後新增確認提示：Are you sure you want to run Get Generate logs? \[y/n]；僅輸入 y/Y 才會執行。
 
 
 
-🔧 調整
+🔧 改動
 
-* 更新Tool標題。
-* LinuxPCT 選單中「移除驗證」跟「清理日誌」兩個動作合併成一個。
-* 強化了共用的指令執行輔助函式，現在能抓到退出碼，並把指令輸出寫進會話日誌。
-* SSD 測試的錯誤處理更細了：目錄準備、檔案複製或刪除只要失敗，就會立刻停止測試並記錄錯誤。
-* 主腳本和 SSD 壓力測試腳本改成從 config.sh 讀取共用設定。
-* 把原本寫死在腳本裡的 USB、安裝目錄、LinuxPCT 日誌、下載目錄、SSD、會話日誌路徑，全部改用集中設定變數。
-* 更新了 SSD 壓力測試的整體流程。
-* 偵錯日誌的搜尋方式改用 debug-logs\_\*.tgz 這種 pattern，不再綁死特定年份的檔名。
-* SSD 的無限迴圈改用 while true 取代舊版的控制變數寫法，邏輯更乾淨。
+
+
+&#x20; - File Copy Test 的 SSD 路徑改為依實際執行中的 ssd.sh 所在目錄判斷。
+
+&#x20; - Capture PCT Logs 成功提示字更新
+
+&#x20; - Debug log 搜尋範圍調整為僅搜尋 /tmp。
+
+&#x20; - File Copy Test 選單提示文字優化。
+
+&#x20; - Benchmark 測試網址集中由 config.sh 管理。
+
+&#x20; - Benchmark 網址開啟後會停留，按 Enter 才返回 Benchmark 子選單。
+
+&#x20; - Benchmark 子測項按下 Enter 返回選單前，增加 0.4 秒緩衝。
+
+&#x20; - Benchmark 網址成功開啟後依序顯示：
+
+&#x20;     - \[+] Execution Completed.
+
+&#x20;     - \[SUCCESS] URL Opened Successfully.
+
+&#x20;     - \[WARN] Please manually switch to VT1 by pressing CTRL+ALT+F1
+
+&#x20; - Info Monitor 欄位間距依實際內容動態調整。
+
+&#x20; - Check GBB Value、File Copy Test、Get Generate Logs 支援游標編輯輸入。
+
+&#x20; - 四處目錄權限由 chmod -R 777 改為 chmod -R 755。
+
+&#x20; - File Copy Test 異常結束時，提示改為指向最新的 SSD 時間戳 log，而非 /tmp/CBVT\_stress.log。
+
+&#x20; - 移除舊的根目錄 ssd.sh，統一使用 SSD/ssd.sh。
+
+&#x20; - 移除舊版 SSD/ssd\_log 測試紀錄。
 
 
 
 🐛 修復
 
-* 修正自訂偵錯日誌資料夾輸入時 readline 不支援的問題。
-* 統一 shell 腳本換行符為 LF，解決 Bash 相容性問題。
-* 部署、GBB 操作、日誌匯出、日誌清理、根檔案系統驗證移除、重啟和關機失敗時，現在都會有明確的錯誤訊息。
-* 修正 USB 部署和日誌匯出過程中「明明失敗卻顯示成功」的問題,現在會先驗證外部指令的結果才繼續往下跑。
-* 修正 SSD 壓力測試的行為:複製或清理失敗時會直接終止測試,不會讓無效的循環繼續跑下去。
 
 
+&#x20; - 修正未插入 USB 時，Copy Tool to DUT / Copy Script to DUT 不再因 USB 不存在而直接失敗，會略過複製動作並繼續執行的問題。
+
+&#x20; - 修正 File Copy Test 可能使用舊版 ChromeBook\_HP\_Stress\_Toolkit 路徑、並建立空資料夾的問題。
+
+&#x20; - 修正 Benchmark URL 開啟成功提示與 VT1 切換提醒重複顯示問題。
+
+&#x20; - Capture PCT Logs 會先確認來源 Log/FFFFFFFF 存在，避免匯出不完整或空的 PCT log。
+
+&#x20; - File Copy Test 的 Remove Rootfs Verification 成功送出 reboot 後，不再出現「Press Enter to return to main menu」。
+
+&#x20; - SSD log 目錄會在 ssd.sh 開始執行時自動建立，避免找不到 SSD/logs。
+
+&#x20; - 修正自訂輸入時，使用左右方向鍵、Backspace、Caps Lock，以及移動游標至字串開頭／結尾時可能產生亂碼或 ? 的問題。
 
