@@ -21,7 +21,7 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 
 ## Getting Started
 
-1. Download and extract the latest release to your local machine.
+1. Download and extract the latest release to your to your USB drive.
 2. (Optional) Place the required HP LinuxPCT binaries into the project directory.
 3. Switched to **VT2** (`Ctrl` + `Alt` + `F2`) and logged in as root.
    ```bash
