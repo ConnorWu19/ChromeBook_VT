@@ -30,12 +30,15 @@ ChromeBook Validation Toolkit 是專為 DQA 工程設計的自動化診斷工具
 
 ## 開始使用
 
-1\. 將此腳本 Clone 至本機端。
+1\. 下載最新版並解壓縮到您的USB隨身碟。
 
 2\. (選用) 將所需的 HP LinuxPCT 執行檔放入同一目錄。
 
-3\. 執行主腳本：
-bash ./ChromeBook\_Validation\_Toolkit.sh
+3\. 切換到VT2（Ctrl + Alt + F2）並以root使用者身分登入。
+
+4\. 插入隨身碟，導航至工具包目錄。
+
+5\. 執行主腳本： bash ./ChromeBook\_Validation\_Toolkit.sh
 
 <img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/4954e687-3f10-44b7-986b-86f9e56d618d" />
 
