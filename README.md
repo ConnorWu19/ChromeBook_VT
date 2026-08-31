@@ -23,8 +23,7 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 
 1. Download and extract the latest release to your local machine.
 2. (Optional) Place the required HP LinuxPCT binaries into the project directory.
-3. Make the main script executable in VT2.
-
+3. Switched to **VT2** (`Ctrl` + `Alt` + `F2`) and logged in as root.
    ```bash
    bash ./ChromeBook_Validation_Toolkit.sh
 <img width="860" height="545" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
