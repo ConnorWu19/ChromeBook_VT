@@ -7,8 +7,8 @@ The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA eng
 
 ## Prerequisites
 
-If you plan to run LinuxPCT stress tests, place the required HP LinuxPCT package in the project directory, other toolkit functions work without LinuxPCT.
-
+1. ChromeOS device is under **Developer Mode**.
+2. If you plan to run LinuxPCT stress tests, place the required HP LinuxPCT package in the project directory, other toolkit functions work without LinuxPCT.
 Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from this repository, please reach out to HP TPM support or the original author to acquire the required files.
 
 
