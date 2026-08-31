@@ -40,5 +40,6 @@ ChromeBook Validation Toolkit 是專為 DQA 工程設計的自動化診斷工具
 
 5\. 執行主腳本： bash ./ChromeBook\_Validation\_Toolkit.sh
 
-<img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/4954e687-3f10-44b7-986b-86f9e56d618d" />
+<img width="520" height="333" alt="image" src="https://github.com/user-attachments/assets/c03b8e33-f82b-42c8-a019-8a7dd8cdad3f" />
+
 
