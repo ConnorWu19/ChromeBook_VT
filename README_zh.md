@@ -1,5 +1,6 @@
 # ChromeBook\_Validation\_Toolkit
 
+[English](README.md)
 
 
 ## 關於
