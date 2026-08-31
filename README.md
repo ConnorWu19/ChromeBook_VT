@@ -26,4 +26,4 @@ Due to NDA and licensing restrictions, the LinuxPCT binaries are excluded from t
 3. Switched to **VT2** (`Ctrl` + `Alt` + `F2`) and logged in as root.
    ```bash
    bash ./ChromeBook_Validation_Toolkit.sh
-<img width="860" height="545" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
+<img width="840" height="530" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
