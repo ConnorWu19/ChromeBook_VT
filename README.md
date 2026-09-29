@@ -22,7 +22,7 @@ The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA eng
 
 ## Getting Started
 
-1. Download and extract the latest release to your to your USB drive.
+1. Download and extract the latest release to your USB drive.
 2. (Optional) Place the required HP LinuxPCT binaries into the project directory if need running PCT tests.
 3. Switched to **VT2** (`Ctrl` + `Alt` + `F2`) and logged in as root.
 4. Insert the USB drive, navigate to the toolkit directory, and launch the script:
