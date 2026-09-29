@@ -4,7 +4,16 @@
 ## About
 
 The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA engineering. It streamlines validation with integrated menus for LinuxPCT stress execution, multimedia testing, and system telemetry monitoring.
-Designed to reduce repetitive validation tasks and provide a centralized workflow for Chromebook DQA and validation engineers.
+
+## 🎯 Project Purpose
+ChromeBook Validation Toolkit was developed to simplify repetitive Chromebook validation procedures by combining commonly used DQA workflows into a single command-line toolkit.
+
+* The project focuses on:
+* Reducing repetitive manual operations
+* Improving validation consistency
+* Centralizing commonly used DQA utilities
+* Simplifying log collection and troubleshooting
+* Automating benchmark and stress-test workflows
 
 ## Features
 
@@ -36,4 +45,4 @@ Designed to reduce repetitive validation tasks and provide a centralized workflo
 
 This project is licensed under the MIT License.
 
-See the LICENSE file for details.
+See the [license](LICENSE) file for details.
