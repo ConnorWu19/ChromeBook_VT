@@ -8,7 +8,7 @@ The ChromeBook Validation Toolkit is an automated diagnostic utility for DQA eng
 ## 🎯 Project Purpose
 ChromeBook Validation Toolkit was developed to simplify repetitive Chromebook validation procedures by combining commonly used DQA workflows into a single command-line toolkit.
 
-**The project focuses on:
+**The project focuses on:**
 * Reducing repetitive manual operations
 * Improving validation consistency
 * Centralizing commonly used DQA utilities
