@@ -42,7 +42,7 @@ ChromeBook Validation Toolkit was developed to simplify repetitive Chromebook va
    ```bash
    bash ./ChromeBook_Validation_Toolkit.sh
    
-<img width="827" height="520" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
+<img width="810" height="510" alt="1 03" src="https://github.com/user-attachments/assets/c8808a1d-0b89-4899-9b03-59cca20cde9a" />
 
 ## 📄 License
 
