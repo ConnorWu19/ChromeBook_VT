@@ -3,7 +3,7 @@
 # Shared configuration for ChromeBook Validation Toolkit.
 
 TOOL_NAME="ChromeBook_VT"
-TOOL_VERSION="v1.03"
+TOOL_VERSION="v1.04"
 TOOL_DIR_NAME="${TOOL_NAME}_${TOOL_VERSION}"
 TOOL_DISPLAY_NAME="ChromeBook Validation Toolkit"
 
@@ -37,7 +37,7 @@ TEST_URL_SPEEDOMETER_2="https://browserbench.org/Speedometer2.0/"
 # Delays are configured independently because benchmark run times differ.
 BENCHMARK_SCREENSHOT_DELAY_GOOGLE_OCTANE_2_SECONDS=120
 BENCHMARK_SCREENSHOT_DELAY_SPEEDOMETER_2_SECONDS=120
-BENCHMARK_SCREENSHOT_DELAY_WEBXPRT_4_SECONDS=1000
+BENCHMARK_SCREENSHOT_DELAY_WEBXPRT_4_SECONDS=1030
 BENCHMARK_SCREENSHOT_DIR="${DOWNLOAD_DIR}/Benchmark_Screenshots"
 
 # WebXPRT 4 result capture. At the scheduled screenshot time, the toolkit OCRs
@@ -45,7 +45,8 @@ BENCHMARK_SCREENSHOT_DIR="${DOWNLOAD_DIR}/Benchmark_Screenshots"
 # OCR is self-contained: lib/tesseract (static ARM64 binary) and
 # lib/eng.traineddata are the only required OCR files.
 WEBXPRT_RESULT_DOWNLOAD_URL="https://www.principledtechnologies.com/benchmarkxprt/webxprt/2021/wx4_build_3_7_3/resultdownlaod.php"
-WEBXPRT_RESULT_DOWNLOAD_DIR="${DOWNLOAD_DIR}/WebXPRT_Results"
+# Keep the WebXPRT CSV beside the benchmark screenshot captured at the same time.
+WEBXPRT_RESULT_DOWNLOAD_DIR="${BENCHMARK_SCREENSHOT_DIR}"
 WEBXPRT_OCR_COMMAND="${SCRIPT_DIR}/lib/tesseract"
 WEBXPRT_OCR_TESSDATA_DIR="${SCRIPT_DIR}/lib"
 WEBXPRT_OCR_LANGUAGE="eng"

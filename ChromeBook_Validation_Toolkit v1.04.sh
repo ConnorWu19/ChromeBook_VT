@@ -166,6 +166,8 @@ function read_line_input() {
                 case "$sequence" in
                     '[D'|'OD') (( cursor > 0 )) && ((cursor--)) ;;
                     '[C'|'OC') (( cursor < ${#input} )) && ((cursor++)) ;;
+                    '[H'|'OH'|'[1~'|'[7~') cursor=0 ;;
+                    '[F'|'OF'|'[4~'|'[8~') cursor=${#input} ;;
                 esac
                 ;;
             '?')
@@ -368,7 +370,7 @@ function countdown_poweroff() {
 }
 
 function Copy_To_DUT() {
-    print_executing "Copy Tool to DUT" 1.0
+    print_executing "Deploy Tool to DUT and Run Locally" 1.0
 
     local TARGET_DIR="$INSTALL_DIR"
     local USB_NAME
@@ -401,7 +403,14 @@ function Copy_To_DUT() {
             return 1
         fi
 
-        log_success "The Toolkit has been successfully copied to ${INSTALL_BASE_DIR}."
+        log_success "The Toolkit has been successfully installed to ${INSTALL_BASE_DIR}."
+        log_info "Starting the local Toolkit version from ${TARGET_DIR}..."
+        sleep 0.5
+        cd "$TARGET_DIR" || {
+            log_error "Unable to change to the local Toolkit directory: ${TARGET_DIR}"
+            return 1
+        }
+        exec bash "${TARGET_DIR}/$(basename "${BASH_SOURCE[0]}")"
     else
         log_error "The Toolkit folder cannot be found on the USB drive. Please check the path."
     fi
@@ -459,8 +468,7 @@ function Online_FHD_Video_Test() {
     echo "  4) Cancel"
     
     while true; do
-        echo -ne "Select an option [1/2/3/4] and press Enter: "
-        read -r vid_opt
+        read_line_input "Select an option [1/2/3/4] and press Enter: " vid_opt
         case "$vid_opt" in
             1)
                 print_executing "Online FHD Video Sample 1" 0.4
@@ -670,15 +678,23 @@ function Run_Benchmark_Test() {
     local schedule_screenshot=${3:-true}
     local screenshot_delay_seconds=${4:-1800}
     local post_capture_handler=${5:-}
-    local raw_sku_id
+    local raw_sku_suffix sku_suffix
 
     while true; do
-        read_line_input "Please input your unit SKU ID, Ex.SKU1-1#02: " raw_sku_id
-        BENCHMARK_SKU_ID=$(printf '%s' "$raw_sku_id" | tr -cd '[:alnum:]_.#-')
-        if [[ -n "$BENCHMARK_SKU_ID" ]]; then
+        read_line_input "Enter SKU number (Ex. 1-1#02), or press [Q] to return: " raw_sku_suffix
+        case "$raw_sku_suffix" in
+            q|Q)
+                log_info "Benchmark test canceled."
+                sleep 0.4
+                return 2
+                ;;
+        esac
+        sku_suffix=$(printf '%s' "$raw_sku_suffix" | tr -cd '[:alnum:]_.#-')
+        if [[ -n "$sku_suffix" ]]; then
+            BENCHMARK_SKU_ID="SKU${sku_suffix}"
             break
         fi
-        echo -e "${RED}SKU ID is required. Use letters, numbers, '.', '_', '-', or '#'.${NC}"
+        echo -e "${RED}SKU suffix is required. Use letters, numbers, '.', '_', '-', or '#'.${NC}"
     done
 
     echo "[$(date +'%H:%M:%S')] [EXEC] ${test_name} (SKU: ${BENCHMARK_SKU_ID})" >> "$LOG_FILE"
@@ -700,7 +716,7 @@ function Run_Benchmark_Test() {
 }
 
 function WebXPRT_4_Test() {
-    log_info "At 1,000 seconds, WebXPRT 4 captures VT1, OCRs the seven-digit Test ID, and downloads the CSV automatically."
+    log_info "At ${BENCHMARK_SCREENSHOT_DELAY_WEBXPRT_4_SECONDS:-1030} seconds, WebXPRT 4 captures VT1, OCRs the seven-digit Test ID, and downloads the CSV automatically."
     if [[ -f "$WEBXPRT_OCR_COMMAND" && ! -x "$WEBXPRT_OCR_COMMAND" ]]; then
         chmod +x "$WEBXPRT_OCR_COMMAND" 2>> "$LOG_FILE" || true
     fi
@@ -709,7 +725,7 @@ function WebXPRT_4_Test() {
     elif [[ ! -r "${WEBXPRT_OCR_TESSDATA_DIR}/${WEBXPRT_OCR_LANGUAGE}.traineddata" ]]; then
         log_warn "${WEBXPRT_OCR_LANGUAGE}.traineddata is unavailable in ${WEBXPRT_OCR_TESSDATA_DIR}. The screenshot will be saved, but automatic CSV download will fail."
     fi
-    Run_Benchmark_Test "WebXPRT 4" "$TEST_URL_WEBXPRT_4" true "${BENCHMARK_SCREENSHOT_DELAY_WEBXPRT_4_SECONDS:-1000}" process_webxprt_result_screenshot
+    Run_Benchmark_Test "WebXPRT 4" "$TEST_URL_WEBXPRT_4" true "${BENCHMARK_SCREENSHOT_DELAY_WEBXPRT_4_SECONDS:-1030}" process_webxprt_result_screenshot
 }
 function Google_Octane_2_Test() { Run_Benchmark_Test "Google Octane 2.0" "$TEST_URL_GOOGLE_OCTANE_2" true "${BENCHMARK_SCREENSHOT_DELAY_GOOGLE_OCTANE_2_SECONDS:-900}"; }
 function Speedometer_2_Test() { Run_Benchmark_Test "Speedometer 2.0" "$TEST_URL_SPEEDOMETER_2" true "${BENCHMARK_SCREENSHOT_DELAY_SPEEDOMETER_2_SECONDS:-1800}"; }
@@ -774,6 +790,7 @@ function File_Copy_Test_Menu() {
 function Benchmark_Test_Menu() {
     stty echo
     tput cnorm
+    local benchmark_status
 
     echo "[$(date +'%H:%M:%S')] [EXEC] Benchmark Test Menu" >> "$LOG_FILE"
 
@@ -792,16 +809,22 @@ function Benchmark_Test_Menu() {
         case "$benchmark_opt" in
             1)
                 WebXPRT_4_Test
+                benchmark_status=$?
+                [[ $benchmark_status -eq 2 ]] && continue
                 read_line_input "\n${MAGENTA}Press [Enter] to return to Benchmark Test menu...${NC}" wait_key
                 sleep 0.4
                 ;;
             2)
                 Google_Octane_2_Test
+                benchmark_status=$?
+                [[ $benchmark_status -eq 2 ]] && continue
                 read_line_input "\n${MAGENTA}Press [Enter] to return to Benchmark Test menu...${NC}" wait_key
                 sleep 0.4
                 ;;
             3)
                 Speedometer_2_Test
+                benchmark_status=$?
+                [[ $benchmark_status -eq 2 ]] && continue
                 read_line_input "\n${MAGENTA}Press [Enter] to return to Benchmark Test menu...${NC}" wait_key
                 sleep 0.4
                 ;;
@@ -866,9 +889,117 @@ function Run_LinuxPCT_Stress() {
     fi
 }
 
+function Restore_All_PCT_Cycles() {
+    local ini_files=("s3.ini" "restart.ini" "s5_chrome.ini" "multitest.ini")
+    local ini_file ini_path backup_path configured_cycles confirm
+
+    echo -e "\n${YELLOW}This will set all four LinuxPCT scripts to 1000 cycles.${NC}"
+    read_line_input "Restore all scripts to default cycles? [y/n]: " confirm
+    case "$confirm" in
+        y|Y) ;;
+        *) log_info "Restore All To Default canceled."; return 0 ;;
+    esac
+
+    for ini_file in "${ini_files[@]}"; do
+        ini_path="${INSTALL_DIR}/${ini_file}"
+        if [[ ! -f "$ini_path" ]]; then
+            log_error "LinuxPCT configuration file not found: ${ini_path}"
+            return 1
+        fi
+    done
+
+    print_executing "Restore All PCT Cycles" 0.4
+    for ini_file in "${ini_files[@]}"; do
+        ini_path="${INSTALL_DIR}/${ini_file}"
+        backup_path="${ini_path}.bak"
+        if [[ ! -e "$backup_path" ]]; then
+            if ! run_logged_command "Back up original ${ini_file}" sudo cp -p "$ini_path" "$backup_path"; then
+                return 1
+            fi
+        fi
+        if ! run_logged_command "Restore ${ini_file} default cycles" sudo sed -i '1c\1000' "$ini_path"; then
+            return 1
+        fi
+        configured_cycles=$(sed -n '1p' "$ini_path")
+        if [[ "$configured_cycles" != "1000" ]]; then
+            log_error "Unable to verify the default cycle value in ${ini_file}."
+            return 1
+        fi
+    done
+
+    log_success "All LinuxPCT scripts restored to 1000 cycles."
+}
+
+function Set_Custom_PCT_Cycles() {
+    local ini_file ini_path backup_path custom_cycles confirm configured_cycles
+
+    print_executing "Custom Script Cycles" 0.4
+    echo -e "\n${YELLOW}Select a LinuxPCT script to update:${NC}"
+    echo "  1) S3 Stress (s3.ini)"
+    echo "  2) Restart Stress (restart.ini)"
+    echo "  3) S5 Chrome Stress (s5_chrome.ini)"
+    echo "  4) S3 + S5 Chrome + Restart Stress (multitest.ini)"
+    echo "  5) Restore All To Default (1000 cycles)"
+    echo "  6) Cancel"
+
+    while true; do
+        read_line_input "Select an option [1/2/3/4/5/6]: " confirm
+        case "$confirm" in
+            1) ini_file="s3.ini"; break ;;
+            2) ini_file="restart.ini"; break ;;
+            3) ini_file="s5_chrome.ini"; break ;;
+            4) ini_file="multitest.ini"; break ;;
+            5) Restore_All_PCT_Cycles; return $? ;;
+            6|q|Q) log_info "Custom Script Cycles canceled."; return 0 ;;
+            *) echo -e "${RED}Invalid option, please try again.${NC}" ;;
+        esac
+    done
+
+    ini_path="${INSTALL_DIR}/${ini_file}"
+    if [[ ! -f "$ini_path" ]]; then
+        log_error "LinuxPCT configuration file not found: ${ini_path}"
+        return 1
+    fi
+
+    while true; do
+        read_line_input "Enter custom cycles [1-999999999], or [Q] to cancel: " custom_cycles
+        case "$custom_cycles" in
+            q|Q) log_info "Custom Script Cycles canceled."; return 0 ;;
+        esac
+        if [[ "$custom_cycles" =~ ^[1-9][0-9]{0,8}$ ]]; then
+            break
+        fi
+        echo -e "${RED}Enter a whole number between 1 and 999999999.${NC}"
+    done
+
+    read_line_input "Update ${ini_file} to ${custom_cycles} cycles? [y/n]: " confirm
+    case "$confirm" in
+        y|Y) ;;
+        *) log_info "Custom Script Cycles canceled."; return 0 ;;
+    esac
+
+    backup_path="${ini_path}.bak"
+    if [[ ! -e "$backup_path" ]]; then
+        if ! run_logged_command "Back up original ${ini_file}" sudo cp -p "$ini_path" "$backup_path"; then
+            return 1
+        fi
+    fi
+
+    if ! run_logged_command "Set ${ini_file} custom cycles" sudo sed -i "1c\\${custom_cycles}" "$ini_path"; then
+        return 1
+    fi
+    configured_cycles=$(sed -n '1p' "$ini_path")
+    if [[ "$configured_cycles" != "$custom_cycles" ]]; then
+        log_error "Unable to verify the updated cycle value in ${ini_file}."
+        return 1
+    fi
+
+    log_success "${ini_file} updated to ${custom_cycles} cycles. Original backup: ${backup_path}"
+}
+
 function Capture_PCT_Logs() {
     print_executing "Capture PCT Logs" 1.0
-    log_info "Copying logs to USB disk..."
+    log_info "Copying logs to Downloads and USB disk..."
     
     local log_dir="$PCT_LOG_DIR"
     if [[ -d "$log_dir" ]]; then
@@ -877,6 +1008,18 @@ function Capture_PCT_Logs() {
             log_error "PCT log directory not found: $pct_log_source"
             return 1
         fi
+
+        local downloads_pct_log_dir="${DOWNLOAD_DIR}/LinuxPCT_log/Log"
+        if ! run_logged_command "Create LinuxPCT log directory in Downloads" sudo mkdir -p "$downloads_pct_log_dir"; then
+            return 1
+        fi
+        if ! run_logged_command "Copy LinuxPCT logs to Downloads" sudo cp -a -p --no-preserve=ownership "$pct_log_source" "$downloads_pct_log_dir/"; then
+            return 1
+        fi
+        if ! run_logged_command "Set LinuxPCT Downloads log ownership" sudo chown -R chronos:chronos "$downloads_pct_log_dir"; then
+            return 1
+        fi
+        log_success "Logs successfully copied to Downloads/LinuxPCT_log."
 
         local usb_name=$(ls "$USB_MOUNT_BASE_DIR" 2>/dev/null | head -n 1)
         if [[ -n "$usb_name" ]]; then
@@ -890,7 +1033,7 @@ function Capture_PCT_Logs() {
 
             log_success "Logs successfully copied to external USB disk/LinuxPCT_log (${usb_name})."
         else
-            log_warn "USB disk not found in ${USB_MOUNT_BASE_DIR}, logs only copied to Downloads."
+            log_warn "USB disk not found in ${USB_MOUNT_BASE_DIR}, logs copied to Downloads only."
         fi
     else
         log_error "Log directory not found: $log_dir"
@@ -1037,14 +1180,28 @@ function Remove_Verification_And_Clean_Logs() {
     countdown_reboot
 }
 
+function Get_PCT_Configured_Cycles() {
+    local ini_path="${INSTALL_DIR}/$1"
+    local configured_cycles
+
+    if [[ -r "$ini_path" ]]; then
+        IFS= read -r configured_cycles < "$ini_path"
+        if [[ "$configured_cycles" =~ ^[1-9][0-9]{0,8}$ ]]; then
+            printf '%s' "$configured_cycles"
+            return
+        fi
+    fi
+    printf 'N/A'
+}
+
 function build_menu() {
     MENU_TEXT=(); MENU_CMD=()
     case $CURRENT_TAB in
         0)
-            MENU_TEXT+=("    1) Copy Tool to DUT"); MENU_CMD+=("CMD_COPY_DUT")
+            MENU_TEXT+=("    1) Deploy Tool to DUT and Run Locally"); MENU_CMD+=("CMD_COPY_DUT")
             MENU_TEXT+=("    2) Get Generate Logs"); MENU_CMD+=("CMD_LOGS")
             MENU_TEXT+=("    3) Clean Logs (Unit will reboot)"); MENU_CMD+=("CMD_CLEAN")
-            MENU_TEXT+=("    4) Check GBB Value"); MENU_CMD+=("CMD_CHECK_GBB")
+            MENU_TEXT+=("    4) Change GBB Value"); MENU_CMD+=("CMD_CHECK_GBB")
             MENU_TEXT+=("    5) Reboot System"); MENU_CMD+=("CMD_REBOOT")
             MENU_TEXT+=("    6) Power Off System"); MENU_CMD+=("CMD_POWEROFF")
             MENU_TEXT+=("    7) Exit"); MENU_CMD+=("CMD_EXIT")
@@ -1059,13 +1216,18 @@ function build_menu() {
             MENU_TEXT+=("    7) Exit"); MENU_CMD+=("CMD_EXIT")
             ;;
         2)
-            MENU_TEXT+=("    1) S3 Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_S3")
-            MENU_TEXT+=("    2) Restart Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_RESTART")
-            MENU_TEXT+=("    3) S5_Chrome Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_S5")
-            MENU_TEXT+=("    4) S3 + S5_Chrome + Restart Stress (1000 cycles)"); MENU_CMD+=("CMD_PCT_MULTI")
-            MENU_TEXT+=("    5) Capture Logs to USB Disk"); MENU_CMD+=("CMD_PCT_LOGS")
-            MENU_TEXT+=("    6) (Excute me before run PCT) Remove Verification + Clean logs"); MENU_CMD+=("CMD_RM_VERIFY_CLEAN")
-            MENU_TEXT+=("    7) Exit"); MENU_CMD+=("CMD_EXIT")
+            local s3_cycles=$(Get_PCT_Configured_Cycles "s3.ini")
+            local restart_cycles=$(Get_PCT_Configured_Cycles "restart.ini")
+            local s5_cycles=$(Get_PCT_Configured_Cycles "s5_chrome.ini")
+            local multitest_cycles=$(Get_PCT_Configured_Cycles "multitest.ini")
+            MENU_TEXT+=("    1) S3 Stress (${s3_cycles} cycles)"); MENU_CMD+=("CMD_PCT_S3")
+            MENU_TEXT+=("    2) Restart Stress (${restart_cycles} cycles)"); MENU_CMD+=("CMD_PCT_RESTART")
+            MENU_TEXT+=("    3) S5_Chrome Stress (${s5_cycles} cycles)"); MENU_CMD+=("CMD_PCT_S5")
+            MENU_TEXT+=("    4) S3 + S5_Chrome + Restart Stress (${multitest_cycles} cycles)"); MENU_CMD+=("CMD_PCT_MULTI")
+            MENU_TEXT+=("    5) Custom Script Cycles"); MENU_CMD+=("CMD_PCT_CYCLES")
+            MENU_TEXT+=("    6) Capture Logs to USB Disk and Downloads"); MENU_CMD+=("CMD_PCT_LOGS")
+            MENU_TEXT+=("    7) (Excute me before run PCT) Remove Verification + Clean logs"); MENU_CMD+=("CMD_RM_VERIFY_CLEAN")
+            MENU_TEXT+=("    8) Exit"); MENU_CMD+=("CMD_EXIT")
             ;;
     esac
     
@@ -1075,8 +1237,8 @@ function build_menu() {
 
 function get_opt_color() {
     if [[ "$1" == *"Exit"* ]]; then echo -n "${RED}"
-    elif [[ "$1" == *"Copy Tool to DUT"* || "$1" == *"Copy Tool To DUT"* || "$1" == *"Get Generate Logs"* || "$1" == *"Reboot System"* || "$1" == *"Power Off System"* || "$1" == *"Clean Logs"* || "$1" == *"Check GBB Value"* ]]; then echo -n "${YELLOW}"
-    elif [[ "$1" == *"Stress"* || "$1" == *"Remove Verification"* || "$1" == *"Capture Logs"* ]]; then echo -n "${MAGENTA}"
+    elif [[ "$1" == *"Deploy Tool to DUT"* || "$1" == *"Get Generate Logs"* || "$1" == *"Reboot System"* || "$1" == *"Power Off System"* || "$1" == *"Clean Logs"* || "$1" == *"Change GBB Value"* ]]; then echo -n "${YELLOW}"
+    elif [[ "$1" == *"Stress"* || "$1" == *"Custom Script Cycles"* || "$1" == *"Remove Verification"* || "$1" == *"Capture Logs"* ]]; then echo -n "${MAGENTA}"
     else echo -n "${GREEN}"; fi
 }
 
@@ -1193,6 +1355,7 @@ while true; do
                     CMD_PCT_RESTART) Run_LinuxPCT_Stress "restart.ini" "Restart Stress (1000 cycles)" ; PAUSE=1 ;;
                     CMD_PCT_S5) Run_LinuxPCT_Stress "s5_chrome.ini" "S5 Chrome Stress (1000 cycles)" ; PAUSE=1 ;;
                     CMD_PCT_MULTI) Run_LinuxPCT_Stress "multitest.ini" "S3 + S5_Chrome + Restart Stress" ; PAUSE=1 ;;
+                    CMD_PCT_CYCLES) Set_Custom_PCT_Cycles ; PAUSE=1 ;;
                     CMD_PCT_LOGS) Capture_PCT_Logs ; PAUSE=1 ;;
                     CMD_RM_VERIFY) Remove_Verification_Unit_will_reboot ;;
                     CMD_RM_VERIFY_CLEAN) Remove_Verification_And_Clean_Logs ;;
